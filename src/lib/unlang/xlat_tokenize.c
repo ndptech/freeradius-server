@@ -192,6 +192,23 @@ static inline CC_HINT(always_inline) void xlat_flags_merge(xlat_flags_t *parent,
 	parent->needs_resolving |= child->needs_resolving;
 }
 
+/** Insert an xlat_exp_t node into a list
+ *
+ * @param[in,out] head	of list being inserted into
+ * @param[in,out] prev	node to where this should be inserted
+ * @param[in] node	to add to the list.
+ */
+static inline void xlat_exp_insert_node(xlat_exp_t **head, xlat_exp_t **prev, xlat_exp_t *node) {
+	if (!(*head)) {
+		*head = node;
+		*prev = node;
+	} else {
+		node->next = (*prev)->next;
+		(*prev)->next = node;
+		*prev = node;
+	}
+}
+
 /** Free a linked list of xlat nodes
  *
  * @param[in,out] head	to free.  Will be set to NULL
@@ -847,12 +864,12 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 						L("%{")
 					);
 	fr_sbuff_term_t			*tokens;
-	fr_cursor_t			cursor;
+	xlat_exp_t			*prev;
 	fr_sbuff_unescape_rules_t const	*escapes;
 
 	*head = NULL;
+	prev = *head;
 
-	fr_cursor_init(&cursor, head);
 	escapes = p_rules ? p_rules->escapes : NULL;
 	tokens = p_rules && p_rules->terminals ?
 			fr_sbuff_terminals_amerge(NULL, p_rules->terminals, &expansions) : &expansions;
@@ -882,7 +899,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 				   fr_box_strvalue_len(str, talloc_array_length(str) - 1));
 			XLAT_HEXDUMP((uint8_t const *)str, talloc_array_length(str) - 1, " LITERAL ");
 			node->flags.needs_async = false; /* literals are always true */
-			fr_cursor_insert(&cursor, node);
+			xlat_exp_insert_node(head, &prev, node);
 			node = NULL;
 		}
 
@@ -892,8 +909,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 			if (xlat_tokenize_expansion(ctx, &node, flags, in, t_rules) < 0) {
 			error:
 				talloc_free(node);
-				fr_cursor_head(&cursor);
-				fr_cursor_free_list(&cursor);
+				xlat_exp_free(head);
 
 				/*
 				 *	Free our temporary array of terminals
@@ -901,7 +917,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 				if (tokens != &expansions) talloc_free(tokens);
 				return -1;
 			}
-			fr_cursor_insert(&cursor, node);
+			xlat_exp_insert_node(head, &prev, node);
 			node = NULL;
 			continue;
 		}
@@ -913,7 +929,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 			if (len == 0) TALLOC_FREE(node); /* Free the empty node */
 
 			if (xlat_tokenize_function_multi_arg(ctx, &node, flags, in, t_rules) < 0) goto error;
-			fr_cursor_insert(&cursor, node);
+			xlat_exp_insert_node(head, &prev, node);
 			node = NULL;
 			continue;
 		}
@@ -937,7 +953,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 
 			node->flags.needs_async = false; /* literals are always true */
 			xlat_flags_merge(flags, &node->flags);
-			fr_cursor_insert(&cursor, node);
+			xlat_exp_insert_node(head, &prev, node);
 			node = NULL;
 			continue;
 		}
@@ -981,7 +997,7 @@ static int xlat_tokenize_literal(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_
 				XLAT_DEBUG("LITERAL <-- (empty)");
 				node->flags.needs_async = false; /* literals are always true */
 				xlat_flags_merge(flags, &node->flags);
-				fr_cursor_insert(&cursor, node);
+				xlat_exp_insert_node(head, &prev, node);
 			}
 		}
 		break;
@@ -1270,15 +1286,16 @@ ssize_t xlat_tokenize_argv(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *fla
 {
 	fr_sbuff_t			our_in = FR_SBUFF_NO_ADVANCE(in);
 	ssize_t				slen;
-	fr_cursor_t			cursor;
 	fr_sbuff_marker_t		m;
 	fr_sbuff_parse_rules_t const	*our_p_rules;	/* Bareword parse rules */
 	fr_sbuff_parse_rules_t		tmp_p_rules;
 	xlat_flags_t			tmp_flags = {};
+	xlat_exp_t			*prev;
 
 	if (!flags) flags = &tmp_flags;
 
 	*head = NULL;
+	prev = *head;
 
 	if (p_rules && p_rules->terminals) {
 		tmp_p_rules = (fr_sbuff_parse_rules_t){	/* Stack allocated due to CL scope */
@@ -1299,7 +1316,6 @@ ssize_t xlat_tokenize_argv(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *fla
 	fr_sbuff_adv_past_whitespace(in, SIZE_MAX, NULL);
 	fr_sbuff_marker(&m, &our_in);
 
-	fr_cursor_init(&cursor, head);
 	while (fr_sbuff_extend(&our_in)) {
 		xlat_exp_t	*node = NULL;
 		fr_token_t	quote;
@@ -1330,8 +1346,7 @@ ssize_t xlat_tokenize_argv(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *fla
 					talloc_const_free(our_p_rules->terminals);
 				}
 				talloc_free(node);
-				fr_cursor_head(&cursor);
-				fr_cursor_free_list(&cursor);
+				xlat_exp_free(head);
 
 				return -fr_sbuff_used(&our_in);	/* error */
 			}
@@ -1389,7 +1404,7 @@ ssize_t xlat_tokenize_argv(TALLOC_CTX *ctx, xlat_exp_t **head, xlat_flags_t *fla
 		xlat_exp_set_name_buffer_shallow(node, fmt);
 
 		xlat_flags_merge(flags, &node->flags);
-		fr_cursor_insert(&cursor, node);
+		xlat_exp_insert_node(head, &prev, node);
 		node = NULL;
 
 		/*
