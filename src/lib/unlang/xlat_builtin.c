@@ -2390,13 +2390,6 @@ static xlat_action_t xlat_func_randstr(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 *	Nothing to do if input is empty
 	 */
 	if (!in_head) return XLAT_ACTION_DONE;
-	/*
-	 *	Concatenate all input
-	 */
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
 
 	start = p = in_head->vb_strvalue;
 	end = p + in_head->vb_length;
@@ -2533,6 +2526,11 @@ static xlat_action_t xlat_func_randstr(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_randstr_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
+
 
 #if defined(HAVE_REGEX_PCRE) || defined(HAVE_REGEX_PCRE2)
 /** Get named subcapture value from previous regex
@@ -3407,7 +3405,7 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("pack", xlat_func_pack, xlat_func_pack_arg);
 	XLAT_REGISTER_MONO("pairs", xlat_func_pairs, xlat_func_pairs_arg);
 	XLAT_REGISTER_MONO("rand", xlat_func_rand, xlat_func_rand_arg);
-	xlat_register(NULL, "randstr", xlat_func_randstr, false);
+	XLAT_REGISTER_MONO("randstr", xlat_func_randstr, xlat_func_randstr_arg);
 #if defined(HAVE_REGEX_PCRE) || defined(HAVE_REGEX_PCRE2)
 	xlat_register(NULL, "regex", xlat_func_regex, false);
 #endif
