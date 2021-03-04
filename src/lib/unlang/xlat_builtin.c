@@ -2250,11 +2250,6 @@ static xlat_action_t xlat_func_pairs(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 */
 	if (!in_head) return XLAT_ACTION_DONE;
 
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
-
 	fr_pair_t *vp;
 
 	if (tmpl_afrom_attr_str(ctx, NULL, &vpt, in_head->vb_strvalue,
@@ -2288,6 +2283,10 @@ static xlat_action_t xlat_func_pairs(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_pairs_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 
 /** Generate a random integer value
@@ -3407,7 +3406,7 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("md5", xlat_func_md5, xlat_func_md5_arg);
 	xlat_register(NULL, "module", xlat_func_module, false);
 	XLAT_REGISTER_MONO("pack", xlat_func_pack, xlat_func_pack_arg);
-	xlat_register(NULL, "pairs", xlat_func_pairs, false);
+	XLAT_REGISTER_MONO("pairs", xlat_func_pairs, xlat_func_pairs_arg);
 	xlat_register(NULL, "rand", xlat_func_rand, false);
 	xlat_register(NULL, "randstr", xlat_func_randstr, false);
 #if defined(HAVE_REGEX_PCRE) || defined(HAVE_REGEX_PCRE2)
