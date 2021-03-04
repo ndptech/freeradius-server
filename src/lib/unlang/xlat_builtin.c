@@ -1798,27 +1798,24 @@ static xlat_action_t xlat_func_bin(TALLOC_CTX *ctx, fr_dcursor_t *out,
 				   fr_value_box_list_t *in)
 {
 	fr_value_box_t		*result;
-	char			*buff = NULL, *p, *end;
+	char const		*p, *end;
 	uint8_t			*bin;
 	size_t			len, outlen;
 	fr_sbuff_parse_error_t	err;
+	fr_value_box_t		*in_head = fr_dlist_head(in);
 
 	/*
 	 *	If there's no input, there's no output
 	 */
 	if (fr_dlist_empty(in)) return XLAT_ACTION_DONE;
 
-	buff = fr_value_box_list_aprint(NULL, in, NULL, NULL);
-	if (!buff) return XLAT_ACTION_FAIL;
-
-	len = talloc_array_length(buff) - 1;
+	len = in_head->vb_length;
 	if ((len > 1) && (len & 0x01)) {
 		REDEBUG("Input data length must be >1 and even, got %zu", len);
-		talloc_free(buff);
 		return XLAT_ACTION_FAIL;
 	}
 
-	p = buff;
+	p = in_head->vb_strvalue;
 	end = p + len;
 
 	/*
@@ -1841,9 +1838,13 @@ static xlat_action_t xlat_func_bin(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_dcursor_append(out, result);
 
 finish:
-	talloc_free(buff);
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_bin_arg = {
+	.required = true, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_STRING,
+	.func = NULL, .uctx = NULL
+};
 
 
 /** Concatenate values of given attributes using separator
@@ -3428,7 +3429,7 @@ int xlat_init(void)
 
 	XLAT_REGISTER_MONO("base64", xlat_func_base64_encode, xlat_func_base64_encode_arg);
 	XLAT_REGISTER_MONO("base64decode", xlat_func_base64_decode, xlat_func_base64_decode_arg);
-	xlat_register(NULL, "bin", xlat_func_bin, false);
+	XLAT_REGISTER_MONO("bin", xlat_func_bin, xlat_func_bin_arg);
 	xlat_register(NULL, "concat", xlat_func_concat, false);
 	xlat_register(NULL, "hex", xlat_func_hex, false);
 	xlat_register(NULL, "hmacmd5", xlat_func_hmac_md5, false);
