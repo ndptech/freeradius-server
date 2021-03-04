@@ -2300,19 +2300,13 @@ xlat_arg_parser_t xlat_func_pairs_arg = {
  *
  * @ingroup xlat_functions
  */
-static xlat_action_t xlat_func_rand(TALLOC_CTX *ctx, fr_dcursor_t *out,
-				    request_t *request, UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+static xlat_action_t xlat_func_rand(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED request_t *request,
+				    UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
 				    fr_value_box_list_t *in)
 {
 	int64_t		result;
 	fr_value_box_t	*vb;
 	fr_value_box_t	*in_head = fr_dlist_head(in);
-
-	/* Make sure input can be converted to an unsigned 32 bit integer */
-	if (fr_value_box_cast_in_place(ctx, in_head, FR_TYPE_UINT32, NULL) < 0) {
-		RPEDEBUG("Failed converting input to uint32");
-		return XLAT_ACTION_FAIL;
-	}
 
 	result = in_head->vb_uint32;
 
@@ -2329,6 +2323,11 @@ static xlat_action_t xlat_func_rand(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_rand_arg = {
+	.required = true, .concat = false, .single = true, .variadic = false, .type = FR_TYPE_UINT32,
+	.func = NULL, .uctx = NULL
+};
 
 
 /** Generate a string of random chars
@@ -3407,7 +3406,7 @@ int xlat_init(void)
 	xlat_register(NULL, "module", xlat_func_module, false);
 	XLAT_REGISTER_MONO("pack", xlat_func_pack, xlat_func_pack_arg);
 	XLAT_REGISTER_MONO("pairs", xlat_func_pairs, xlat_func_pairs_arg);
-	xlat_register(NULL, "rand", xlat_func_rand, false);
+	XLAT_REGISTER_MONO("rand", xlat_func_rand, xlat_func_rand_arg);
 	xlat_register(NULL, "randstr", xlat_func_randstr, false);
 #if defined(HAVE_REGEX_PCRE) || defined(HAVE_REGEX_PCRE2)
 	xlat_register(NULL, "regex", xlat_func_regex, false);
