@@ -1841,6 +1841,7 @@ finish:
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_bin_arg;
 xlat_arg_parser_t xlat_func_bin_arg = {
 	.required = true, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_STRING,
 	.func = NULL, .uctx = NULL
@@ -1946,6 +1947,7 @@ static xlat_action_t xlat_func_hex(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED re
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_hex_arg;
 xlat_arg_parser_t xlat_func_hex_arg = {
 	.required = false, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_OCTETS,
 	.func = NULL, .uctx = NULL
@@ -2100,6 +2102,7 @@ static xlat_action_t xlat_func_md4(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED re
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_md4_arg;
 xlat_arg_parser_t xlat_func_md4_arg = {
 	.required = false, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_OCTETS,
 	.func = NULL, .uctx = NULL
@@ -2138,6 +2141,7 @@ static xlat_action_t xlat_func_md5(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED re
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_md5_arg;
 xlat_arg_parser_t xlat_func_md5_arg = {
 	.required = false, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_OCTETS,
 	.func = NULL, .uctx = NULL
@@ -2214,6 +2218,7 @@ static xlat_action_t xlat_func_pack(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED r
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_pack_arg;
 xlat_arg_parser_t xlat_func_pack_arg = {
 	.required = true, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_OCTETS,
 	.func = NULL, .uctx = NULL
@@ -2284,6 +2289,7 @@ static xlat_action_t xlat_func_pairs(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_pairs_arg;
 xlat_arg_parser_t xlat_func_pairs_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -2324,6 +2330,7 @@ static xlat_action_t xlat_func_rand(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED r
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_rand_arg;
 xlat_arg_parser_t xlat_func_rand_arg = {
 	.required = true, .concat = false, .single = true, .variadic = false, .type = FR_TYPE_UINT32,
 	.func = NULL, .uctx = NULL
@@ -2527,6 +2534,7 @@ static xlat_action_t xlat_func_randstr(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_randstr_arg;
 xlat_arg_parser_t xlat_func_randstr_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -2670,6 +2678,7 @@ static xlat_action_t xlat_func_sha1(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUSED r
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_sha_arg;
 xlat_arg_parser_t xlat_func_sha_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_OCTETS, .func = NULL, .uctx = NULL
 };
@@ -2758,6 +2767,7 @@ static xlat_action_t xlat_func_string(UNUSED TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_string_arg;
 xlat_arg_parser_t xlat_func_string_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -2795,6 +2805,7 @@ static xlat_action_t xlat_func_strlen(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_strlen_arg;
 xlat_arg_parser_t xlat_func_strlen_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -3102,6 +3113,7 @@ static xlat_action_t xlat_change_case(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_case_arg;
 xlat_arg_parser_t xlat_func_case_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -3223,6 +3235,7 @@ static xlat_action_t xlat_func_urlquote(TALLOC_CTX *ctx, fr_dcursor_t *out, UNUS
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_urlquote_arg;
 xlat_arg_parser_t xlat_func_urlquote_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
@@ -3301,6 +3314,7 @@ static xlat_action_t xlat_func_urlunquote(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_urlunquote_arg;
 xlat_arg_parser_t xlat_func_urlunquote_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
