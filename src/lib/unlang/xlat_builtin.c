@@ -3255,14 +3255,6 @@ static xlat_action_t xlat_func_urlunquote(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 */
 	if (!in_head) return XLAT_ACTION_DONE;
 
-	/*
-	 * Concatenate all input
-	 */
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
-
 	p = in_head->vb_strvalue;
 	end = p + in_head->vb_length;
 
@@ -3308,6 +3300,11 @@ static xlat_action_t xlat_func_urlunquote(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_urlunquote_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
+
 
 /** Global initialisation for xlat
  *
@@ -3403,10 +3400,10 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("string", xlat_func_string, xlat_func_string_arg);
 	XLAT_REGISTER_MONO("strlen", xlat_func_strlen, xlat_func_strlen_arg);
 	xlat_register(NULL, "sub", xlat_func_sub, false);
-	xlat_register(NULL, "urlunquote", xlat_func_urlunquote, false);
 	XLAT_REGISTER_MONO("tolower", xlat_func_tolower, xlat_func_case_arg);
 	XLAT_REGISTER_MONO("toupper", xlat_func_toupper, xlat_func_case_arg);
 	XLAT_REGISTER_MONO("urlquote", xlat_func_urlquote, xlat_func_urlquote_arg);
+	XLAT_REGISTER_MONO("urlunquote", xlat_func_urlunquote, xlat_func_urlquote_arg);
 
 	return 0;
 }
