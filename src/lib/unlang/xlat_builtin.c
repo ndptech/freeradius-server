@@ -3073,7 +3073,7 @@ static xlat_action_t xlat_func_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
  * If upper is true, change to uppercase, otherwise, change to lowercase
  */
 static xlat_action_t xlat_change_case(TALLOC_CTX *ctx, fr_dcursor_t *out,
-				       request_t *request, fr_value_box_list_t *in, bool upper)
+				       UNUSED request_t *request, fr_value_box_list_t *in, bool upper)
 {
 	char		*buff_p;
 	char const	*p, *end;
@@ -3084,14 +3084,6 @@ static xlat_action_t xlat_change_case(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 *	If there's no input, there's no output
 	 */
 	if (!in_head) return XLAT_ACTION_DONE;
-
-	/*
-	 * Concatenate all input
-	 */
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
 
 	p = in_head->vb_strvalue;
 	end = p + in_head->vb_length;
@@ -3109,6 +3101,10 @@ static xlat_action_t xlat_change_case(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+xlat_arg_parser_t xlat_func_case_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 
 /** Convert a string to lowercase
@@ -3411,10 +3407,10 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("string", xlat_func_string, xlat_func_string_arg);
 	XLAT_REGISTER_MONO("strlen", xlat_func_strlen, xlat_func_strlen_arg);
 	xlat_register(NULL, "sub", xlat_func_sub, false);
-	xlat_register(NULL, "tolower", xlat_func_tolower, false);
-	xlat_register(NULL, "toupper", xlat_func_toupper, false);
 	xlat_register(NULL, "urlquote", xlat_func_urlquote, false);
 	xlat_register(NULL, "urlunquote", xlat_func_urlunquote, false);
+	XLAT_REGISTER_MONO("tolower", xlat_func_tolower, xlat_func_case_arg);
+	XLAT_REGISTER_MONO("toupper", xlat_func_toupper, xlat_func_case_arg);
 
 	return 0;
 }
