@@ -1051,14 +1051,14 @@ xlat_action_t xlat_frame_eval_repeat(TALLOC_CTX *ctx, fr_dcursor_t *out,
 			if (!fr_dlist_empty(result)) { fr_dlist_verify(result); }
 			xa = xlat_process_args(ctx, result, request, node->call.func->input_type, node->call.func->args);
 			if (xa == XLAT_ACTION_FAIL) {
-				if (RDEBUG_ENABLED2) fr_dlist_talloc_free(&result_copy);
-				return (xa);
+				if (RDEBUG_ENABLED2) fr_value_box_list_free(&result_copy);
+				return xa;
 			}
 			xa = node->call.func->func.async(ctx, out, request, node->call.inst->data, thread_inst->data, result);
 			if (!fr_dlist_empty(result)) { fr_dlist_verify(result); }
 			if (RDEBUG_ENABLED2) {
 				xlat_debug_log_expansion(request, *in, &result_copy);
-				fr_dlist_talloc_free(&result_copy);
+				fr_value_box_list_free(&result_copy);
 			}
 			switch (xa) {
 			case XLAT_ACTION_FAIL:
