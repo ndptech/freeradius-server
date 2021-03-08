@@ -5152,6 +5152,14 @@ int fr_value_box_list_acopy(TALLOC_CTX *ctx, fr_value_box_list_t *out, fr_value_
 
 		if (fr_value_box_copy(n, n, in_p) < 0) goto error;
 		fr_dlist_insert_tail(out, n);
+
+		/*
+		 *	If the value box is a group, copy the children to the new list
+		 */
+		if (n->type == FR_TYPE_GROUP) {
+			fr_value_box_list_init(&n->vb_group);
+			fr_value_box_list_acopy(ctx, &n->vb_group, &in_p->vb_group);
+		}
 	}
 
 	return 0;
