@@ -2860,14 +2860,6 @@ static xlat_action_t xlat_func_sub_regex(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 
 	/*
-	 *	If there's no input, there's no output
-	 */
-	if (!in_head) {
-		REDEBUG("No input arguments");
-		return XLAT_ACTION_FAIL;
-	}
-
-	/*
 	 *	Concatenate all input
 	 */
 	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
