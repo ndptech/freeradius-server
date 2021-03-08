@@ -315,6 +315,22 @@ static inline void fr_value_box_list_init(fr_value_box_list_t *list)
 {
 	fr_dlist_talloc_init(list, fr_value_box_t, entry);
 }
+
+/** Free a list of fr_value_box_t including any children
+ *
+ * @param[in,out] list	to free
+ */
+static inline void fr_value_box_list_free(fr_value_box_list_t *list)
+{
+	fr_value_box_t	*p, *vb = NULL;
+
+	while ((vb = fr_dlist_next(list, vb))) {
+		if (vb->type == FR_TYPE_GROUP) fr_value_box_list_free(&vb->vb_group);
+		p = fr_dlist_remove(list, vb);
+		talloc_free(vb);
+		vb = p;
+	}
+}
 /** @} */
 
 /** @name Value box assignment functions
