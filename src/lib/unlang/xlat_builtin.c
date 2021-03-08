@@ -1976,20 +1976,17 @@ static xlat_action_t xlat_hmac(TALLOC_CTX *ctx, fr_dcursor_t *out,
 {
 	uint8_t const	*data_p, *key_p;
 	size_t		data_len, key_len;
-	fr_value_box_t	*vb, *vb_data, *vb_sep, *vb_key;
+	fr_value_box_t	*vb, *vb_data, *vb_key;
 
 	if (fr_dlist_empty(in)) return XLAT_ACTION_FAIL;
 
-	vb_data = fr_dlist_head(in);
-	vb_sep = fr_dlist_next(in, vb_data);
-	vb_key = fr_dlist_next(in, vb_sep);
-
-	if (!vb_data || !vb_sep || !vb_key ||
-            vb_sep->vb_length != 1 ||
-            vb_sep->vb_strvalue[0] != ' ') {
+	if (fr_dlist_num_elements(in) != 2) {
 		REDEBUG("HMAC requires exactly two arguments (%%{data} %%{key})");
 		return XLAT_ACTION_FAIL;
 	}
+
+	vb_data = fr_dlist_head(in);
+	vb_key = fr_dlist_next(in, vb_data);
 
 	data_p = vb_data->vb_octets;
 	data_len = vb_data->vb_length;
@@ -2011,12 +2008,18 @@ static xlat_action_t xlat_hmac(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_hmac_args[];
+xlat_arg_parser_t xlat_hmac_args[] = {
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	XLAT_ARG_PARSER_TERMINATOR
+};
 
 /** Generate the HMAC-MD5 of a string or attribute
  *
  * Example:
 @verbatim
-"%{hmacmd5:%{string:foo} %{string:bar}}" == "0x31b6db9e5eb4addb42f1a6ca07367adc"
+"%(hmacmd5:%{string:foo} %{string:bar})" == "0x31b6db9e5eb4addb42f1a6ca07367adc"
 @endverbatim
  *
  * @ingroup xlat_functions
@@ -2034,7 +2037,7 @@ static xlat_action_t xlat_func_hmac_md5(TALLOC_CTX *ctx, fr_dcursor_t *out,
  *
  * Example:
 @verbatim
-"%{hmacsha1:%{string:foo} %{string:bar}}" == "0x85d155c55ed286a300bd1cf124de08d87e914f3a"
+"%(hmacsha1:%{string:foo} %{string:bar})" == "0x85d155c55ed286a300bd1cf124de08d87e914f3a"
 @endverbatim
  *
  * @ingroup xlat_functions
@@ -3391,8 +3394,8 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("bin", xlat_func_bin, xlat_func_bin_arg);
 	XLAT_REGISTER_ARGS("concat", xlat_func_concat, xlat_func_concat_args);
 	XLAT_REGISTER_MONO("hex", xlat_func_hex, xlat_func_hex_arg);
-	xlat_register(NULL, "hmacmd5", xlat_func_hmac_md5, false);
-	xlat_register(NULL, "hmacsha1", xlat_func_hmac_sha1, false);
+	XLAT_REGISTER_ARGS("hmacmd5", xlat_func_hmac_md5, xlat_hmac_args);
+	XLAT_REGISTER_ARGS("hmacsha1", xlat_func_hmac_sha1, xlat_hmac_args);
 	xlat_register(NULL, "length", xlat_func_length, false);
 	XLAT_REGISTER_MONO("md4", xlat_func_md4, xlat_func_md4_arg);
 	XLAT_REGISTER_MONO("md5", xlat_func_md5, xlat_func_md5_arg);
