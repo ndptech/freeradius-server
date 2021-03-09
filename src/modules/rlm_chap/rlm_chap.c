@@ -85,19 +85,6 @@ static xlat_action_t xlat_func_chap_password(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_value_box_t	*in_head = fr_dlist_head(in);
 
 	/*
-	 *	If there's no input, there's no output
-	 */
-	if (!in_head) {
-		REDEBUG("chap requires a password as input");
-		return XLAT_ACTION_FAIL;
-	}
-
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
-
-	/*
 	 *	Use Chap-Challenge pair if present,
 	 *	Request Authenticator otherwise.
 	 */
@@ -116,6 +103,11 @@ static xlat_action_t xlat_func_chap_password(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+extern xlat_arg_parser_t xlat_func_chap_password_arg;
+xlat_arg_parser_t xlat_func_chap_password_arg = {
+	.required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 static unlang_action_t CC_HINT(nonnull) mod_authorize(rlm_rcode_t *p_result, module_ctx_t const *mctx, request_t *request)
 {
@@ -311,7 +303,11 @@ static int mod_instantiate(void *instance, UNUSED CONF_SECTION *conf)
 
 static int mod_load(void)
 {
-	if (!xlat_register(NULL, "chap_password", xlat_func_chap_password, false)) return -1;
+	xlat_t	*xlat;
+
+	xlat = xlat_register(NULL, "chap_password", xlat_func_chap_password, false);
+	if (!xlat) return -1;
+	xlat_func_mono(xlat, &xlat_func_chap_password_arg);
 
 	return 0;
 }
