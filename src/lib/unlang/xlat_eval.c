@@ -193,7 +193,11 @@ static inline void xlat_debug_log_expansion(request_t *request, xlat_exp_t const
 	 *	well as the original fmt string.
 	 */
 	if ((node->type == XLAT_FUNC) && !xlat_is_literal(node->child)) {
-		RDEBUG2("      (%%{%s:%pM})", node->call.func->name, args);
+		if (node->call.func->input_type == XLAT_INPUT_ARGS) {
+			RDEBUG2("      (%%(%s:%pS))", node->call.func->name, args);
+		} else {
+			RDEBUG2("      (%%{%s:%pM})", node->call.func->name, args);
+		}
 	}
 	talloc_free(str);
 }
