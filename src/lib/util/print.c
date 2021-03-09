@@ -775,6 +775,7 @@ char *fr_vasprintf(TALLOC_CTX *ctx, char const *fmt, va_list ap)
 				goto do_splice;
 
 			case 'M':
+			case 'S':
 			{
 				fr_value_box_list_t const *in = va_arg(ap_q, fr_value_box_list_t const *);
 
@@ -783,7 +784,11 @@ char *fr_vasprintf(TALLOC_CTX *ctx, char const *fmt, va_list ap)
 					goto do_splice;
 				}
 
-				subst = fr_value_box_list_aprint(NULL, in, NULL, &fr_value_escape_double);
+				if ((*(p+1)) == 'S') {
+					subst = fr_value_box_list_aprint(NULL, in, " ", &fr_value_escape_double);
+				} else {
+					subst = fr_value_box_list_aprint(NULL, in, NULL, &fr_value_escape_double);
+				}
 			}
 				goto do_splice;
 
