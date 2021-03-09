@@ -2849,26 +2849,20 @@ static xlat_action_t xlat_func_sub_regex(TALLOC_CTX *ctx, fr_dcursor_t *out,
 					 fr_value_box_list_t *in)
 {
 	char const		*p, *q, *end;
-	char const		*regex, *rep, *subject;
+	char const		*regex;
 	char			*buff;
-	size_t			regex_len, rep_len, subject_len;
+	size_t			regex_len;
 	ssize_t			slen;
 	regex_t			*pattern;
 	fr_regex_flags_t	flags;
 	fr_value_box_t		*vb;
-	fr_value_box_t		*in_head = fr_dlist_head(in);
+	fr_value_box_t		*regex_vb = fr_dlist_head(in);
+	fr_value_box_t		*rep_vb = fr_dlist_next(in, regex_vb);
+	fr_value_box_t		*subject_vb = fr_dlist_next(in, rep_vb);
 
 
-	/*
-	 *	Concatenate all input
-	 */
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
-
-	p = in_head->vb_strvalue;
-	end = p + in_head->vb_length;
+	p = regex_vb->vb_strvalue;
+	end = p + regex_vb->vb_length;
 
 	if (p == end) {
 		REDEBUG("Regex must not be empty");
@@ -2898,44 +2892,13 @@ static xlat_action_t xlat_func_sub_regex(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	/*
 	 *	Parse '[flags]'
 	 */
-	q = memchr(p, ' ', end - p);
-	if (!q) {
-		REDEBUG("Missing replacement");
-		return XLAT_ACTION_FAIL;
-	}
-
 	memset(&flags, 0, sizeof(flags));
 
-	slen = regex_flags_parse(NULL, &flags, &FR_SBUFF_IN(p, q), NULL, true);
+	slen = regex_flags_parse(NULL, &flags, &FR_SBUFF_IN(p, end), NULL, true);
 	if (slen < 0) {
 		RPEDEBUG("Failed parsing regex flags");
 		return XLAT_ACTION_FAIL;
 	}
-
-	/*
-	 *	Parse ' <replace>'
-	 */
-	p += slen;
-
-	fr_assert(*p == ' ');
-
-	p++;	/* Skip space */
-	rep = p;
-
-	/*
-	 *	Parse ' <subject>'
-	 */
-	q = memchr(p, ' ', end - p);
-	if (!q) {
-		REDEBUG("Missing subject");
-		return XLAT_ACTION_FAIL;
-	}
-	rep_len = q - p;
-
-	p = q + 1;
-
-	subject = p;
-	subject_len = end - p;
 
 	/*
 	 *	Process the substitution
@@ -2947,13 +2910,14 @@ static xlat_action_t xlat_func_sub_regex(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	MEM(vb = fr_value_box_alloc_null(ctx));
 	if (regex_substitute(vb, &buff, 0, pattern, &flags,
-			     subject, subject_len, rep, rep_len, NULL) < 0) {
+			     subject_vb->vb_strvalue, subject_vb->vb_length,
+			     rep_vb->vb_strvalue, rep_vb->vb_length, NULL) < 0) {
 		RPEDEBUG("Failed performing substitution");
 		talloc_free(vb);
 		talloc_free(pattern);
 		return XLAT_ACTION_FAIL;
 	}
-	fr_value_box_bstrdup_buffer_shallow(NULL, vb, NULL, buff, in_head->tainted);
+	fr_value_box_bstrdup_buffer_shallow(NULL, vb, NULL, buff, subject_vb->tainted);
 
 	fr_dcursor_append(out, vb);
 
@@ -2995,33 +2959,13 @@ static xlat_action_t xlat_func_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	size_t			pattern_len, rep_len;
 
 	fr_value_box_t		*vb;
-	fr_value_box_t		*in_head = fr_dlist_head(in);
+	fr_value_box_t		*pattern_vb = fr_dlist_head(in);
+	fr_value_box_t		*rep_vb = fr_dlist_next(in, pattern_vb);
+	fr_value_box_t		*subject_vb = fr_dlist_next(in, rep_vb);
 
-	/*
-	 *	If there's no input, there's no output
-	 */
-	if (!in_head) {
-		REDEBUG("No input arguments");
-		return XLAT_ACTION_FAIL;
-	}
+	pattern = pattern_vb->vb_strvalue;
 
-	/*
-	 *	Concatenate all input
-	 */
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		return XLAT_ACTION_FAIL;
-	}
-
-	p = in_head->vb_strvalue;
-	end = p + in_head->vb_length;
-
-	if (p == end) {
-		REDEBUG("Substitution arguments must not be empty");
-		return XLAT_ACTION_FAIL;
-	}
-
-	if (*p == '/') {
+	if (*pattern == '/') {
 #ifdef HAVE_REGEX_PCRE2
 		return xlat_func_sub_regex(ctx, out, request, xlat_inst, xlat_thread_inst, in);
 #else
@@ -3032,33 +2976,20 @@ static xlat_action_t xlat_func_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	}
 
 	/*
-	 *	Parse '<pattern> '
+	 *	Check for empty pattern
 	 */
-	q = memchr(p, ' ', end - p);
-	if (!q || (q == p)) {
-		REDEBUG("Missing pattern");
+	pattern_len = pattern_vb->vb_length;
+	if (pattern_len == 0) {
+		REDEBUG("Empty pattern");
 		return XLAT_ACTION_FAIL;
 	}
 
-	pattern = p;
-	pattern_len = q - p;
-	p = q + 1;
+	rep = rep_vb->vb_strvalue;
+	rep_len = rep_vb->vb_length;
 
-	/*
-	 *	Parse '<replacement> '
-	 */
-	q = memchr(p, ' ', end - p);
-	if (!q) {
-		REDEBUG("Missing subject");
-		return XLAT_ACTION_FAIL;
-	}
-	rep = p;
-	rep_len = q - p;
-	p = q + 1;
+	p = subject_vb->vb_strvalue;
+	end = p + subject_vb->vb_length;
 
-	/*
-	 *	Parse '<subject>'
-	 */
 	MEM(vb = fr_value_box_alloc_null(ctx));
 	vb_str = talloc_bstrndup(vb, "", 0);
 
@@ -3074,7 +3005,7 @@ static xlat_action_t xlat_func_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 		p = q + pattern_len;
 	}
 
-	if (fr_value_box_bstrdup_buffer_shallow(vb, vb, NULL, vb_str, in_head->vb_strvalue) < 0) {
+	if (fr_value_box_bstrdup_buffer_shallow(vb, vb, NULL, vb_str, subject_vb->tainted) < 0) {
 		RPEDEBUG("Failed creating output box");
 		talloc_free(vb);
 		return XLAT_ACTION_FAIL;
@@ -3085,6 +3016,14 @@ static xlat_action_t xlat_func_sub(TALLOC_CTX *ctx, fr_dcursor_t *out,
 
 	return XLAT_ACTION_DONE;
 }
+
+extern xlat_arg_parser_t xlat_func_sub_args[];
+xlat_arg_parser_t xlat_func_sub_args[] = {
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	XLAT_ARG_PARSER_TERMINATOR
+};
 
 /** Change case of a string
  *
@@ -3422,7 +3361,7 @@ int xlat_init(void)
 
 	XLAT_REGISTER_MONO("string", xlat_func_string, xlat_func_string_arg);
 	XLAT_REGISTER_MONO("strlen", xlat_func_strlen, xlat_func_strlen_arg);
-	xlat_register(NULL, "sub", xlat_func_sub, false);
+	XLAT_REGISTER_ARGS("sub", xlat_func_sub, xlat_func_sub_args);
 	XLAT_REGISTER_MONO("tolower", xlat_func_tolower, xlat_func_case_arg);
 	XLAT_REGISTER_MONO("toupper", xlat_func_toupper, xlat_func_case_arg);
 	XLAT_REGISTER_MONO("urlquote", xlat_func_urlquote, xlat_func_urlquote_arg);
