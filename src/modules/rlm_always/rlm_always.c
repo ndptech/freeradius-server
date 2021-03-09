@@ -124,10 +124,15 @@ done:
 
 }
 
+extern xlat_arg_parser_t always_xlat_arg;
+xlat_arg_parser_t always_xlat_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
+
 static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 {
 	rlm_always_t	*inst = instance;
-	xlat_t const	*xlat;
+	xlat_t		*xlat;
 
 	inst->xlat_name = cf_section_name2(conf);
 	if (!inst->xlat_name) {
@@ -135,6 +140,7 @@ static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 	}
 
 	xlat = xlat_register(inst, inst->xlat_name, always_xlat, false);
+	xlat_func_mono(xlat, &always_xlat_arg);
 	xlat_async_instantiate_set(xlat, always_xlat_instantiate, rlm_always_t *, NULL, inst);
 
 	return 0;
