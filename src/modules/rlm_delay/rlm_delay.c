@@ -221,7 +221,7 @@ static void xlat_delay_cancel(request_t *request, UNUSED void *instance, UNUSED 
  *
  * @ingroup xlat_functions
  */
-static xlat_action_t xlat_delay(TALLOC_CTX *ctx, UNUSED fr_dcursor_t *out,
+static xlat_action_t xlat_delay(UNUSED TALLOC_CTX *ctx, UNUSED fr_dcursor_t *out,
 				request_t *request, void const *xlat_inst, UNUSED void *xlat_thread_inst,
 				fr_value_box_list_t *in)
 {
@@ -253,12 +253,6 @@ static xlat_action_t xlat_delay(TALLOC_CTX *ctx, UNUSED fr_dcursor_t *out,
 		goto yield;
 	}
 
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input");
-		talloc_free(yielded_at);
-		return XLAT_ACTION_FAIL;
-	}
-
 	if (fr_time_delta_from_str(&delay, in_head->vb_strvalue, FR_TIME_RES_SEC) < 0) {
 		RPEDEBUG("Failed parsing delay time");
 		talloc_free(yielded_at);
@@ -285,6 +279,11 @@ yield:
 	return unlang_xlat_yield(request, xlat_delay_resume, xlat_delay_cancel, yielded_at);
 }
 
+extern xlat_arg_parser_t xlat_delay_arg;
+xlat_arg_parser_t xlat_delay_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
+
 static int mod_xlat_instantiate(void *xlat_inst, UNUSED xlat_exp_t const *exp, void *uctx)
 {
 	*((void **)xlat_inst) = talloc_get_type_abort(uctx, rlm_delay_t);
@@ -293,13 +292,14 @@ static int mod_xlat_instantiate(void *xlat_inst, UNUSED xlat_exp_t const *exp, v
 
 static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 {
-	rlm_delay_t *inst = instance;
-	xlat_t const *xlat;
+	rlm_delay_t	*inst = instance;
+	xlat_t		*xlat;
 
 	inst->xlat_name = cf_section_name2(conf);
 	if (!inst->xlat_name) inst->xlat_name = cf_section_name1(conf);
 
 	xlat = xlat_register(inst, inst->xlat_name, xlat_delay, true);
+	xlat_func_mono(xlat, &xlat_delay_arg);
 	xlat_async_instantiate_set(xlat, mod_xlat_instantiate, rlm_delay_t *, NULL, inst);
 	return 0;
 }
