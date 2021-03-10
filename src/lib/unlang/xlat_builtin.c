@@ -850,24 +850,28 @@ int xlat_register_legacy_redundant(CONF_SECTION *cs)
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_debug(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
-			       UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-			       request_t *request, char const *fmt)
+static xlat_action_t xlat_func_debug(TALLOC_CTX *ctx, fr_dcursor_t *out,
+				     request_t *request, UNUSED void const *xlat_inst,
+				     UNUSED void *xlat_thread_inst, fr_value_box_list_t *in)
 {
 	int level = 0;
+	fr_value_box_t	*vb;
+	fr_value_box_t	*in_head = fr_dlist_head(in);
 
 	/*
 	 *  Expand to previous (or current) level
 	 */
-	snprintf(*out, outlen, "%d", request->log.lvl);
+	MEM(vb = fr_value_box_alloc(ctx, FR_TYPE_INT8, NULL, false));
+	vb->vb_int8 = request->log.lvl;
+	fr_dcursor_append(out, vb);
 
 	/*
 	 *  Assume we just want to get the current value and NOT set it to 0
 	 */
-	if (!*fmt)
+	if (!in_head)
 		goto done;
 
-	level = atoi(fmt);
+	level = in_head->vb_int8;
 	if (level == 0) {
 		request->log.lvl = RAD_REQUEST_LVL_NONE;
 	} else {
@@ -876,9 +880,13 @@ static ssize_t xlat_func_debug(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen
 	}
 
 done:
-	return strlen(*out);
+	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_debug_arg;
+xlat_arg_parser_t xlat_func_debug_arg = {
+	.required = false, .concat = false, .variadic = false, .type = FR_TYPE_INT8, .func = NULL, .uctx = NULL
+};
 
 /** Print out attribute info
  *
@@ -3302,8 +3310,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	xlat = xlat_register_legacy(NULL, "debug", xlat_func_debug, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
-	xlat_internal(xlat);
 	XLAT_REGISTER(debug_attr);
 	xlat_register_legacy(NULL, "explode", xlat_func_explode, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
 	XLAT_REGISTER(integer);
@@ -3324,6 +3330,7 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("base64decode", xlat_func_base64_decode, xlat_func_base64_decode_arg);
 	XLAT_REGISTER_MONO("bin", xlat_func_bin, xlat_func_bin_arg);
 	XLAT_REGISTER_ARGS("concat", xlat_func_concat, xlat_func_concat_args);
+	XLAT_REGISTER_MONO("debug", xlat_func_debug, xlat_func_debug_arg);
 	XLAT_REGISTER_MONO("hex", xlat_func_hex, xlat_func_hex_arg);
 	XLAT_REGISTER_ARGS("hmacmd5", xlat_func_hmac_md5, xlat_hmac_args);
 	XLAT_REGISTER_ARGS("hmacsha1", xlat_func_hmac_sha1, xlat_hmac_args);
