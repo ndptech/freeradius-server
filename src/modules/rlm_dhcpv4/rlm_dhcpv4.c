@@ -56,7 +56,7 @@ typedef struct {
  *
  * Example:
 @verbatim
-%{dhcpv4_decode:%{Tmp-Octets-0}}
+%(dhcpv4_decode:%{Tmp-Octets-0})
 @endverbatim
  *
  * @ingroup xlat_functions
@@ -126,6 +126,12 @@ static xlat_action_t dhcpv4_decode_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t dhcpv4_decode_xlat_args[];
+xlat_arg_parser_t dhcpv4_decode_xlat_args[] = {
+	{ .required = false, .concat = false, .variadic = true, .type = FR_TYPE_VALUE_BOX, .func = NULL, .uctx = NULL},
+	XLAT_ARG_PARSER_TERMINATOR
+};
+
 /** Encode DHCP option data
  *
  * Returns octet string created from the provided DHCP attributes
@@ -151,11 +157,6 @@ static xlat_action_t dhcpv4_encode_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	fr_value_box_t	*in_head = fr_dlist_head(in);
 
 	if (!in_head) return XLAT_ACTION_DONE;
-
-	if (fr_value_box_list_concat(ctx, in_head, in, FR_TYPE_STRING, true) < 0) {
-		RPEDEBUG("Failed concatenating input string for attribute reference");
-		return XLAT_ACTION_FAIL;
-	}
 
 	if (xlat_fmt_to_cursor(NULL, &cursor, &tainted, request, in_head->vb_strvalue) < 0) return XLAT_ACTION_FAIL;
 
@@ -183,15 +184,24 @@ static xlat_action_t dhcpv4_encode_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t dhcpv4_encode_xlat_arg;
+xlat_arg_parser_t dhcpv4_encode_xlat_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
+
 static int dhcp_load(void)
 {
+	xlat_t	*xlat;
+
 	if (fr_dhcpv4_global_init() < 0) {
 		PERROR("Failed initialising protocol library");
 		return -1;
 	}
 
-	xlat_register(NULL, "dhcpv4_decode", dhcpv4_decode_xlat, false);
-	xlat_register(NULL, "dhcpv4_encode", dhcpv4_encode_xlat, false);
+	xlat = xlat_register(NULL, "dhcpv4_decode", dhcpv4_decode_xlat, false);
+	xlat_func_args(xlat, dhcpv4_decode_xlat_args);
+	xlat = xlat_register(NULL, "dhcpv4_encode", dhcpv4_encode_xlat, false);
+	xlat_func_mono(xlat, &dhcpv4_encode_xlat_arg);
 
 	return 0;
 }
