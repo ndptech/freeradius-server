@@ -1000,10 +1000,10 @@ Number of seconds remaining in the current year + if <num> > 1, the number of
 seconds in the additional years specified.
 .RE
 
-.IP %{lpad:&{<value_ref>\ <rep>\ <pad>}}
+.IP %(lpad:&<value_ref>\ <rep>\ <pad>)
 Left-pad a string.
 
-e.g. if User-Name is "foo": "%{lpad:&User-Name 6 x}" == "xxxfoo"
+e.g. if User-Name is "foo": "%(lpad:&User-Name 6 x)" == "xxxfoo"
 
 .IP %{rpad:&{<value_ref>\ <rep>\ <pad>}}
 Right-pad a string.

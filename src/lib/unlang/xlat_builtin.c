@@ -1496,12 +1496,12 @@ xlat_arg_parser_t xlat_func_pad_args[] = {
 /** Left pad a string
  *
 @verbatim
-%{lpad:&Attribute-Name <length> <char>}
+%(lpad:&Attribute-Name <length> <char>)
 @endverbatim
  *
  * Example: (User-Name = "foo")
 @verbatim
-"%{lpad:&User-Name 5 x}" == "xxfoo"
+"%(lpad:&User-Name 5 x)" == "xxfoo"
 @endverbatim
  *
  * @ingroup xlat_functions
