@@ -1663,12 +1663,12 @@ static ssize_t xlat_func_next_time(UNUSED TALLOC_CTX *ctx, char **out, size_t ou
 /** Right pad a string
  *
 @verbatim
-%{rpad:&Attribute-Name <length> <char>}
+%(rpad:&Attribute-Name <length> <char>)
 @endverbatim
  *
  * Example: (User-Name = "foo")
 @verbatim
-"%{rpad:&User-Name 5 x}" == "fooxx"
+"%(rpad:&User-Name 5 x)" == "fooxx"
 @endverbatim
  *
  * @ingroup xlat_functions

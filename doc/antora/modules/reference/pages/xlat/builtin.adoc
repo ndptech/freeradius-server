@@ -395,7 +395,7 @@ update reply {
 Maximum should be 00000000123
 ```
 
-=== %{rpad:<&ref> <val> <char>}
+=== %(rpad:<&ref> <val> <char>)
 
 Right-pad a string.
 
@@ -409,7 +409,7 @@ update control {
     &Tmp-String-0 := "123"
 }
 update reply {
-    &Reply-Message := "Maximum should be %{rpad:&control.Tmp-String-0 11 0}"
+    &Reply-Message := "Maximum should be %(rpad:&control.Tmp-String-0 11 0)"
 }
 ----
 

@@ -1005,10 +1005,10 @@ Left-pad a string.
 
 e.g. if User-Name is "foo": "%(lpad:&User-Name 6 x)" == "xxxfoo"
 
-.IP %{rpad:&{<value_ref>\ <rep>\ <pad>}}
+.IP %(rpad:&<value_ref>\ <rep>\ <pad>)
 Right-pad a string.
 
-e.g. if User-Name is "foo": "%{rpad:&User-Name 5 -}" == "foo--"
+e.g. if User-Name is "foo": "%(rpad:&User-Name 5 -)" == "foo--"
 
 .SH ATTRIBUTE ASSIGNMENTS
 The attribute lists described above may be edited by listing one or
