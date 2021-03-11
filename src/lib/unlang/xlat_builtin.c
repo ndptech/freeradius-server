@@ -1200,31 +1200,32 @@ update request {
 @endverbatim
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_integer(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
-				 UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-				 request_t *request, char const *fmt)
+static xlat_action_t xlat_func_integer(TALLOC_CTX *ctx, fr_dcursor_t *out,
+				       request_t *request, UNUSED void const *xlat_inst,
+				       UNUSED void *xlat_thread_inst, fr_value_box_list_t *in)
 {
 	fr_pair_t	*vp;
+	fr_value_box_t	*in_head = fr_dlist_head(in);
+	fr_value_box_t	*vb;
 
 	uint64_t	int64 = 0;	/* Needs to be initialised to zero */
-	uint32_t	int32 = 0;	/* Needs to be initialised to zero */
+	char		buff[40];	/* Temporary string representation special conversions */
 
-	fr_skip_whitespace(fmt);
+	if ((xlat_fmt_get_vp(&vp, request, in_head->vb_strvalue) < 0) || !vp) return XLAT_ACTION_DONE;
 
-	if ((xlat_fmt_get_vp(&vp, request, fmt) < 0) || !vp) return 0;
+	MEM(vb=fr_value_box_alloc_null(ctx));
 
 	switch (vp->vp_type) {
 	case FR_TYPE_DATE:
 	case FR_TYPE_STRING:
 	{
-		fr_value_box_t vb;
-
-		if (fr_value_box_cast(NULL, &vb, FR_TYPE_UINT64, NULL, &vp->data) < 0) {
+		if (fr_value_box_cast(NULL, vb, FR_TYPE_UINT64, NULL, &vp->data) < 0) {
 			RPEDEBUG("Invalid input for printing as an integer");
-			return -1;
+			talloc_free(vb);
+			return XLAT_ACTION_FAIL;
 		}
 
-		return snprintf(*out, outlen, "%" PRIu64, vb.vb_uint64);
+		goto finish;
 	}
 
 	case FR_TYPE_OCTETS:
@@ -1233,15 +1234,16 @@ static ssize_t xlat_func_integer(UNUSED TALLOC_CTX *ctx, char **out, size_t outl
 		}
 
 		if (vp->vp_length > 4) {
-			memcpy(&int64, vp->vp_octets, vp->vp_length);
-			return snprintf(*out, outlen, "%" PRIu64, htonll(int64));
+			fr_value_box_cast(NULL, vb, FR_TYPE_INT64, NULL, &vp->data);
+			goto finish;
 		}
 
-		memcpy(&int32, vp->vp_octets, vp->vp_length);
-		return snprintf(*out, outlen, "%i", htonl(int32));
+		fr_value_box_cast(NULL, vb, FR_TYPE_INT32, NULL, &vp->data);
+		goto finish;
 
 	case FR_TYPE_UINT64:
-		return snprintf(*out, outlen, "%" PRIu64, vp->vp_uint64);
+		fr_value_box_cast(NULL, vb, FR_TYPE_UINT64, NULL, &vp->data);
+		goto finish;
 
 	/*
 	 *	IP addresses are treated specially, as parsing functions assume the value
@@ -1249,16 +1251,15 @@ static ssize_t xlat_func_integer(UNUSED TALLOC_CTX *ctx, char **out, size_t outl
 	 */
 	case FR_TYPE_IPV4_ADDR:
 	case FR_TYPE_IPV4_PREFIX:	/* Same addr field */
-		return snprintf(*out, outlen, "%u", ntohl(vp->vp_ipv4addr));
+		snprintf(buff, 40, "%lu", ntohl(vp->vp_ipv4addr));
+		fr_value_box_bstrndup(ctx, vb, NULL, buff, strlen(buff), false);
+		goto finish;
 
 	case FR_TYPE_UINT32:
-		return snprintf(*out, outlen, "%u", vp->vp_uint32);
-
 	case FR_TYPE_UINT8:
-		return snprintf(*out, outlen, "%u", (unsigned int) vp->vp_uint8);
-
 	case FR_TYPE_UINT16:
-		return snprintf(*out, outlen, "%u", (unsigned int) vp->vp_uint16);
+		fr_value_box_cast(NULL, vb, FR_TYPE_UINT32, NULL, &vp->data);
+		goto finish;
 
 	/*
 	 *	Ethernet is weird... It's network related, so it
@@ -1276,14 +1277,19 @@ static ssize_t xlat_func_integer(UNUSED TALLOC_CTX *ctx, char **out, size_t outl
 		int64 |= vp->vp_ether[4];
 		int64 <<= 8;
 		int64 |= vp->vp_ether[5];
-		return snprintf(*out, outlen, "%" PRIu64, int64);
+		snprintf(buff, 40, "%lu", (size_t)int64);
+		fr_value_box_bstrndup(ctx, vb, NULL, buff, strlen(buff), false);
+		goto finish;
 
 	case FR_TYPE_INT32:
-		return snprintf(*out, outlen, "%i", vp->vp_int32);
+		fr_value_box_cast(NULL, vb, FR_TYPE_INT32, NULL, &vp->data);
+		goto finish;
 
 	case FR_TYPE_IPV6_ADDR:
 	case FR_TYPE_IPV6_PREFIX:
-		return fr_snprint_uint128(*out, outlen, ntohlll(*(uint128_t const *) &vp->vp_ipv6addr));
+		fr_snprint_uint128(buff, 40, ntohlll(*(uint128_t const *) &vp->vp_ipv6addr));
+		fr_value_box_bstrndup(ctx, vb, NULL, buff, strlen(buff), false);
+		goto finish;
 
 	default:
 		break;
@@ -1291,9 +1297,17 @@ static ssize_t xlat_func_integer(UNUSED TALLOC_CTX *ctx, char **out, size_t outl
 
 	REDEBUG("Type '%s' cannot be converted to integer", fr_table_str_by_value(fr_value_box_type_table, vp->vp_type, "???"));
 
-	return -1;
+	return XLAT_ACTION_FAIL;
+
+finish:
+	fr_dcursor_append(out, vb);
+	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_integer_arg;
+xlat_arg_parser_t xlat_func_integer_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 /** Parse the 3 arguments to lpad / rpad.
  *
@@ -3319,7 +3333,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	XLAT_REGISTER(integer);
 	xlat_register_legacy(NULL, "lpad", xlat_func_lpad, NULL, NULL, 0, 0);
 	XLAT_REGISTER(map);
 	xlat_register_legacy(NULL, "nexttime", xlat_func_next_time, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
@@ -3343,6 +3356,7 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("hex", xlat_func_hex, xlat_func_hex_arg);
 	XLAT_REGISTER_ARGS("hmacmd5", xlat_func_hmac_md5, xlat_hmac_args);
 	XLAT_REGISTER_ARGS("hmacsha1", xlat_func_hmac_sha1, xlat_hmac_args);
+	XLAT_REGISTER_MONO("integer", xlat_func_integer, xlat_func_integer_arg);
 	xlat_register(NULL, "length", xlat_func_length, false);
 	XLAT_REGISTER_MONO("md4", xlat_func_md4, xlat_func_md4_arg);
 	XLAT_REGISTER_MONO("md5", xlat_func_md5, xlat_func_md5_arg);
