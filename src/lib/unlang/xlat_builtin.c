@@ -1673,45 +1673,11 @@ static ssize_t xlat_func_next_time(UNUSED TALLOC_CTX *ctx, char **out, size_t ou
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_rpad(TALLOC_CTX *ctx, char **out, UNUSED size_t outlen,
-			      UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-			      request_t *request, char const *fmt)
+static xlat_action_t xlat_func_rpad(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+				    UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+				    fr_value_box_list_t *in)
 {
-	char		fill;
-	size_t		pad;
-	ssize_t		len;
-	tmpl_t	*vpt;
-	char		*to_pad = NULL;
-
-	fr_assert(!*out);
-
-	if (parse_pad(&vpt, &pad, &fill, request, fmt) <= 0) return 0;
-
-	if (!fr_cond_assert(vpt)) return 0;
-
-	/*
-	 *	Print the attribute (left justified).  If it's too
-	 *	big, we're done.
-	 */
-	len = tmpl_aexpand(ctx, &to_pad, request, vpt, NULL, NULL);
-	if (len <= 0) return 0;
-
-	if ((size_t) len >= pad) {
-		*out = to_pad;
-		return pad;
-	}
-
-	MEM(to_pad = talloc_realloc(ctx, to_pad, char, pad + 1));
-
-	/*
-	 *	We have to pad with "fill" characters.
-	 */
-	memset(to_pad + len, fill, pad - len);
-	to_pad[pad] = '\0';
-
-	*out = to_pad;
-
-	return pad;
+	return xlat_func_pad(ctx, out, request, in, false);
 }
 
 
@@ -3392,7 +3358,6 @@ int xlat_init(void)
 
 	XLAT_REGISTER(map);
 	xlat_register_legacy(NULL, "nexttime", xlat_func_next_time, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
-	xlat_register_legacy(NULL, "rpad", xlat_func_rpad, NULL, NULL, 0, 0);
 	xlat_register_legacy(NULL, "trigger", trigger_xlat, NULL, NULL, 0, 0);	/* On behalf of trigger.c */
 	XLAT_REGISTER(xlat);
 
@@ -3425,6 +3390,7 @@ int xlat_init(void)
 #if defined(HAVE_REGEX_PCRE) || defined(HAVE_REGEX_PCRE2)
 	xlat_register(NULL, "regex", xlat_func_regex, false);
 #endif
+	XLAT_REGISTER_ARGS("rpad", xlat_func_rpad, xlat_func_pad_args);
 	XLAT_REGISTER_MONO("sha1", xlat_func_sha1, xlat_func_sha_arg);
 
 #ifdef HAVE_OPENSSL_EVP_H
