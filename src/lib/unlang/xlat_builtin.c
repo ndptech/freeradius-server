@@ -1506,50 +1506,11 @@ xlat_arg_parser_t xlat_func_pad_args[] = {
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_lpad(TALLOC_CTX *ctx, char **out, UNUSED size_t outlen,
-			      UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-			      request_t *request, char const *fmt)
+static xlat_action_t xlat_func_lpad(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+				   UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+				   fr_value_box_list_t *in)
 {
-	char		fill;
-	size_t		pad;
-	ssize_t		len;
-	tmpl_t	*vpt;
-	char		*to_pad = NULL;
-
-	if (parse_pad(&vpt, &pad, &fill, request, fmt) <= 0) return 0;
-
-	if (!fr_cond_assert(vpt)) return 0;
-
-	/*
-	 *	Print the attribute (left justified).  If it's too
-	 *	big, we're done.
-	 */
-	len = tmpl_aexpand(ctx, &to_pad, request, vpt, NULL, NULL);
-	if (len <= 0) return -1;
-
-	/*
-	 *	Already big enough, no padding required...
-	 */
-	if ((size_t) len >= pad) {
-		*out = to_pad;
-		return pad;
-	}
-
-	/*
-	 *	Realloc is actually pretty cheap in most cases...
-	 */
-	MEM(to_pad = talloc_realloc(ctx, to_pad, char, pad + 1));
-
-	/*
-	 *	We have to shift the string to the right, and pad with
-	 *	"fill" characters.
-	 */
-	memmove(to_pad + (pad - len), to_pad, len + 1);
-	memset(to_pad, fill, pad - len);
-
-	*out = to_pad;
-
-	return pad;
+	return xlat_func_pad(ctx, out, request, in, true);
 }
 
 
@@ -3429,7 +3390,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	xlat_register_legacy(NULL, "lpad", xlat_func_lpad, NULL, NULL, 0, 0);
 	XLAT_REGISTER(map);
 	xlat_register_legacy(NULL, "nexttime", xlat_func_next_time, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
 	xlat_register_legacy(NULL, "rpad", xlat_func_rpad, NULL, NULL, 0, 0);
@@ -3454,6 +3414,7 @@ int xlat_init(void)
 	XLAT_REGISTER_ARGS("hmacsha1", xlat_func_hmac_sha1, xlat_hmac_args);
 	XLAT_REGISTER_MONO("integer", xlat_func_integer, xlat_func_integer_arg);
 	xlat_register(NULL, "length", xlat_func_length, false);
+	XLAT_REGISTER_ARGS("lpad", xlat_func_lpad, xlat_func_pad_args);
 	XLAT_REGISTER_MONO("md4", xlat_func_md4, xlat_func_md4_arg);
 	XLAT_REGISTER_MONO("md5", xlat_func_md5, xlat_func_md5_arg);
 	xlat_register(NULL, "module", xlat_func_module, false);
