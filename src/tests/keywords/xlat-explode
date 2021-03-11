@@ -11,7 +11,7 @@ update {
 	&control.Reply-Message := 'Can\'t touch this'
 }
 
-if ("%{explode:&Class |}" != 3) {
+if ("%(explode:&Class |)" != 3) {
 	test_fail
 }
 
@@ -27,11 +27,11 @@ if (&Class[3]) {
 	test_fail
 }
 
-if ("%{explode:&control.Calling-Station-Id |}" != 0) {
+if ("%(explode:&control.Calling-Station-Id |)" != 0) {
 	test_fail
 }
 
-if ("%{explode:&control.User-Name[*] |}" != 5) {
+if ("%(explode:&control.User-Name[*] |)" != 5) {
 	test_fail
 }
 
@@ -51,7 +51,7 @@ if (&control.User-Name[5]) {
 	test_fail
 }
 
-if ("%{explode:&control.Reply-Message |}" != 0) {
+if ("%(explode:&control.Reply-Message |)" != 0) {
 	test_fail
 }
 
