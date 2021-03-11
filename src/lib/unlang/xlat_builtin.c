@@ -1251,7 +1251,7 @@ static xlat_action_t xlat_func_integer(TALLOC_CTX *ctx, fr_dcursor_t *out,
 	 */
 	case FR_TYPE_IPV4_ADDR:
 	case FR_TYPE_IPV4_PREFIX:	/* Same addr field */
-		snprintf(buff, 40, "%lu", ntohl(vp->vp_ipv4addr));
+		snprintf(buff, 40, "%u", ntohl(vp->vp_ipv4addr));
 		fr_value_box_bstrndup(ctx, vb, NULL, buff, strlen(buff), false);
 		goto finish;
 
@@ -1396,6 +1396,102 @@ static ssize_t parse_pad(tmpl_t **vpt_p, size_t *pad_len_p, char *pad_char_p, re
 	return p - fmt;
 }
 
+/** Generic padding function used by lpad/rpad
+ *
+ * @param[in] ctx	to allocate buffers in
+ * @param[in,out] out	where to write vbs
+ * @param[in] request	to find attributes in
+ * @param[in] in	parameters provided to xlat
+ * @param[in] pad_left	true for left padding, false for right
+ */
+static xlat_action_t xlat_func_pad(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+				   fr_value_box_list_t *in, bool pad_left)
+{
+	char		fill = ' ';
+	size_t		pad;
+	ssize_t		len;
+	tmpl_t		*vpt;
+	char		*to_pad = NULL;
+	fr_value_box_t	*attr_vb = fr_dlist_head(in);
+	fr_value_box_t	*pad_vb = fr_dlist_next(in, attr_vb);
+	fr_value_box_t	*fill_vb = fr_dlist_next(in, pad_vb);
+	fr_value_box_t	*vb;
+
+	if (pad_vb->vb_uint32 > 8192) {
+		ERROR("Invalid pad length %pV", pad_vb);
+		return XLAT_ACTION_FAIL;
+	}
+	pad = pad_vb->vb_uint32;
+
+	if (fill_vb && (fill_vb->vb_length > 1)) {
+		ERROR("Fill can only be 1 character");
+		return XLAT_ACTION_FAIL;
+	}
+	if (fill_vb && (fill_vb->vb_length == 1)) fill = *(fill_vb->vb_strvalue);
+
+	len = tmpl_afrom_attr_substr(request, NULL, &vpt,
+				      &FR_SBUFF_IN(attr_vb->vb_strvalue, attr_vb->vb_length),
+				      &xlat_arg_parse_rules,
+				      &(tmpl_rules_t){ .dict_def = request->dict });
+	if (len <= 0) {
+		ERROR("Failed parsing input string");
+		return XLAT_ACTION_FAIL;
+	}
+
+	if (!fr_cond_assert(vpt)) return XLAT_ACTION_DONE;
+
+	/*
+	 *	Print the attribute (left justified).  If it's too
+	 *	big, we're done.
+	 */
+	len = tmpl_aexpand(ctx, &to_pad, request, vpt, NULL, NULL);
+	if (len <= 0) return XLAT_ACTION_FAIL;
+
+	/*
+	 *	Already big enough, no padding required...
+	 */
+	if ((size_t) len >= pad) {
+		goto finish;
+	}
+
+	/*
+	 *	Realloc is actually pretty cheap in most cases...
+	 */
+	MEM(to_pad = talloc_realloc(ctx, to_pad, char, pad + 1));
+
+	if (pad_left) {
+		/*
+		 *	We have to shift the string to the right, and pad with
+	 	 *	"fill" characters.
+	 	 */
+		memmove(to_pad + (pad - len), to_pad, len + 1);
+		memset(to_pad, fill, pad - len);
+	} else {
+		/*
+	 	 *	We have to pad with "fill" characters.
+	 	 */
+	memset(to_pad + len, fill, pad - len);
+	to_pad[pad] = '\0';
+
+	}
+
+finish:
+	vb = fr_value_box_alloc(ctx, FR_TYPE_STRING, NULL, false);
+	fr_value_box_bstrndup(ctx, vb, NULL, to_pad, strlen(to_pad), false);
+	fr_dcursor_append(out, vb);
+	return XLAT_ACTION_DONE;
+}
+
+extern xlat_arg_parser_t xlat_func_pad_args[];
+xlat_arg_parser_t xlat_func_pad_args[] = {
+	{ .required = true, .concat = true, .single = false, .variadic = false, .type = FR_TYPE_STRING,
+	  .func = NULL, .uctx = NULL },
+	{ .required = true, .concat = false, .single = true, .variadic = false, .type = FR_TYPE_UINT32,
+	  .func = NULL, .uctx = NULL },
+	{ .required = false, .concat = false, .single = true, .variadic = false, .type = FR_TYPE_STRING,
+	  .func = NULL, .uctx = NULL },
+	XLAT_ARG_PARSER_TERMINATOR
+};
 
 /** Left pad a string
  *
