@@ -1062,47 +1062,41 @@ if ("%{explode:&Tmp-String-1 ,}" != 3) {
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_explode(TALLOC_CTX *ctx, char **out, size_t outlen,
-				 UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-				 request_t *request, char const *fmt)
+static xlat_action_t xlat_func_explode(TALLOC_CTX *ctx, fr_dcursor_t *out,
+				       request_t *request, UNUSED void const *xlat_inst,
+				       UNUSED void *xlat_thread_inst, fr_value_box_list_t *in)
 {
 	tmpl_t			*vpt = NULL;
 	fr_pair_t		*vp;
 	fr_dcursor_t		cursor, to_merge;
 	tmpl_cursor_ctx_t	cc;
 	fr_pair_list_t		head;
-	ssize_t			slen;
+	ssize_t			slen, delim_len;
 	int			count = 0;
-	char const		*p = fmt;
-	char			delim;
+	char const		*p, *delim;
+	fr_value_box_t		*attr_vb = fr_dlist_head(in);
+	fr_value_box_t		*delim_vb = fr_dlist_next(in, attr_vb);
+	fr_value_box_t		*vb;
 
 	fr_pair_list_init(&head);
-	/*
-	 *  Trim whitespace
-	 */
-	fr_skip_whitespace(p);
 
 	slen = tmpl_afrom_attr_substr(ctx, NULL, &vpt,
-				      &FR_SBUFF_IN(p, strlen(p)),
+				      &FR_SBUFF_IN(attr_vb->vb_strvalue, attr_vb->vb_length),
 				      &xlat_arg_parse_rules,
 				      &(tmpl_rules_t){ .dict_def = request->dict });
 	if (slen <= 0) {
 		RPEDEBUG("Invalid input");
-		return -1;
+		return XLAT_ACTION_FAIL;
 	}
 
-	p += slen;
-
-	if (*p++ != ' ') {
-	arg_error:
+	if (delim_vb->vb_length == 0) {
 		talloc_free(vpt);
 		REDEBUG("explode needs exactly two arguments: &ref <delim>");
-		return -1;
+		return XLAT_ACTION_FAIL;
 	}
 
-	if (*p == '\0' || p[1]) goto arg_error;
-
-	delim = *p;
+	delim = delim_vb->vb_strvalue;
+	delim_len = delim_vb->vb_length;
 
 	fr_dcursor_init(&to_merge, &head);
 
@@ -1128,7 +1122,7 @@ static ssize_t xlat_func_explode(TALLOC_CTX *ctx, char **out, size_t outlen,
 		p = vp->vp_ptr;
 		end = p + vp->vp_length;
 		while (p < end) {
-			q = memchr(p, delim, end - p);
+			q = memmem(p, end - p, delim, delim_len);
 			if (!q) {
 				/* Delimiter not present in attribute */
 				if (p == vp->vp_ptr) goto next;
@@ -1137,7 +1131,7 @@ static ssize_t xlat_func_explode(TALLOC_CTX *ctx, char **out, size_t outlen,
 
 			/* Skip zero length */
 			if (q == p) {
-				p = q + 1;
+				p = q + delim_len;
 				continue;
 			}
 
@@ -1157,7 +1151,7 @@ static ssize_t xlat_func_explode(TALLOC_CTX *ctx, char **out, size_t outlen,
 
 			fr_dcursor_append(&to_merge, nvp);
 
-			p = q + 1;	/* next */
+			p = q + delim_len;	/* next */
 
 			count++;
 		}
@@ -1183,9 +1177,19 @@ static ssize_t xlat_func_explode(TALLOC_CTX *ctx, char **out, size_t outlen,
 	fr_dcursor_merge(&cursor, &to_merge);
 	talloc_free(vpt);
 
-	return snprintf(*out, outlen, "%i", count);
+	MEM(vb = fr_value_box_alloc(ctx, FR_TYPE_INT32, NULL, false));
+	vb->vb_int32 = count;
+	fr_dcursor_append(out, vb);
+
+	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_explode_args[];
+xlat_arg_parser_t xlat_func_explode_args[] = {
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	{ .required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL },
+	XLAT_ARG_PARSER_TERMINATOR
+};
 
 /** Print data as integer, not as VALUE.
  *
@@ -3317,7 +3321,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	xlat_register_legacy(NULL, "explode", xlat_func_explode, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
 	XLAT_REGISTER(integer);
 	xlat_register_legacy(NULL, "lpad", xlat_func_lpad, NULL, NULL, 0, 0);
 	XLAT_REGISTER(map);
@@ -3338,6 +3341,7 @@ int xlat_init(void)
 	XLAT_REGISTER_ARGS("concat", xlat_func_concat, xlat_func_concat_args);
 	XLAT_REGISTER_MONO("debug", xlat_func_debug, xlat_func_debug_arg);
 	XLAT_REGISTER_MONO("debug_attr", xlat_func_debug_attr, xlat_func_debug_attr_arg);
+	XLAT_REGISTER_ARGS("explode", xlat_func_explode, xlat_func_explode_args);
 	XLAT_REGISTER_MONO("hex", xlat_func_hex, xlat_func_hex_arg);
 	XLAT_REGISTER_ARGS("hmacmd5", xlat_func_hmac_md5, xlat_hmac_args);
 	XLAT_REGISTER_ARGS("hmacsha1", xlat_func_hmac_sha1, xlat_hmac_args);
