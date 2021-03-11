@@ -9,6 +9,7 @@ update {
 	&control.User-Name += '|hello|goodbye'
 	&control.User-Name += '|morning|night|1|'
 	&control.Reply-Message := 'Can\'t touch this'
+	&control.Tmp-String-0 := 'here.  are . some.  words. '
 }
 
 if ("%(explode:&Class |)" != 3) {
@@ -60,6 +61,17 @@ if ("%{control.Reply-Message[#]}" != 1) {
 }
 
 if (&control.Reply-Message != 'Can\'t touch this') {
+	test_fail
+}
+
+if ("%(explode:&control.Tmp-String-0 '. ')" != 4) {
+	test_fail
+}
+
+if ((&control.Tmp-String-0[0] != 'here') || \
+    (&control.Tmp-String-0[1] != ' are ') || \
+    (&control.Tmp-String-0[2] != 'some') || \
+    (&control.Tmp-String-0[3] != ' words')) {
 	test_fail
 }
 
