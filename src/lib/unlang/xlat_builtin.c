@@ -1038,10 +1038,8 @@ xlat_arg_parser_t xlat_func_debug_attr_arg = {
 
 /** Split an attribute into multiple new attributes based on a delimiter
  *
- * @todo should support multibyte delimiter for string types.
- *
 @verbatim
-%{explode:&ref <delim>}
+%(explode:&ref <delim>)
 @endverbatim
  *
  * Example:
@@ -1049,7 +1047,7 @@ xlat_arg_parser_t xlat_func_debug_attr_arg = {
 update request {
 	&Tmp-String-1 := "a,b,c"
 }
-if ("%{explode:&Tmp-String-1 ,}" != 3) {
+if ("%(explode:&Tmp-String-1 ,)" != 3) {
 	reject
 }
 @endverbatim

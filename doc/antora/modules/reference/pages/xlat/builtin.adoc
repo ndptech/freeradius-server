@@ -340,7 +340,7 @@ aaa, bb, c
 aaa,bb,c
 ```
 
-=== %{explode:<&ref> <delim>}
+=== %(explode:<&ref> <delim>)
 
 Split an attribute into multiple new attributes based on a delimiter.
 The original input attribute is removed, and is replaced with multiple
@@ -358,7 +358,7 @@ update control {
     &Tmp-String-0 := "bob.toba@domain.com"
 }
 
-"%{explode:&control.Tmp-String-0 @}"
+"%(explode:&control.Tmp-String-0 @)"
 
 update reply {
     &Reply-Message := "Welcome %{control.Tmp-String-0[0]}"
