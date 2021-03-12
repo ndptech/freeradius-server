@@ -497,42 +497,44 @@ static size_t config_escape_func(UNUSED request_t *request, char *out, size_t ou
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_config(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
-			   UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-			   request_t *request, char const *fmt)
+static xlat_action_t xlat_config(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+				 UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+				 fr_value_box_list_t *in)
 {
-	char const *value;
-	CONF_PAIR *cp;
-	CONF_ITEM *ci;
-	char buffer[1024];
+	char const	*value;
+	CONF_PAIR	*cp;
+	CONF_ITEM	*ci;
+	char		buffer[1024];
+	fr_value_box_t	*in_head = fr_dlist_head(in);
+	fr_value_box_t	*vb;
 
 	/*
 	 *	Expand it safely.
 	 */
-	if (xlat_eval(buffer, sizeof(buffer), request, fmt, config_escape_func, NULL) < 0) return 0;
+	if (xlat_eval(buffer, sizeof(buffer), request, in_head->vb_strvalue, config_escape_func, NULL) < 0) return XLAT_ACTION_FAIL;
 
 	ci = cf_reference_item(main_config->root_cs, main_config->root_cs, buffer);
 	if (!ci || !cf_item_is_pair(ci)) {
-		REDEBUG("Config item \"%s\" does not exist", fmt);
-		return -1;
+		REDEBUG("Config item \"%pV\" does not exist", in_head);
+		return XLAT_ACTION_FAIL;
 	}
 
 	cp = cf_item_to_pair(ci);
 
-	/*
-	 *  Ensure that we only copy what's necessary.
-	 *
-	 *  If 'outlen' is too small, then the output is chopped to fit.
-	 */
 	value = cf_pair_value(cp);
-	if (!value) return 0;
+	if (!value) return XLAT_ACTION_DONE;
 
-	if (outlen > strlen(value)) outlen = strlen(value) + 1;
+	MEM(vb = fr_value_box_alloc_null(ctx));
+	fr_value_box_bstrndup(ctx, vb, NULL, value, strlen(value), false);
+	fr_dcursor_append(out, vb);
 
-	strlcpy(*out, value, outlen);
-
-	return strlen(*out);
+	return XLAT_ACTION_DONE;
 }
+
+extern xlat_arg_parser_t xlat_config_arg;
+xlat_arg_parser_t xlat_config_arg = {
+	.required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 #ifdef HAVE_SETUID
 static int mkdir_chown(int fd, char const *path, void *uctx)
@@ -862,11 +864,12 @@ static int _dlhandle_free(void **dl_handle)
  */
 int main_config_init(main_config_t *config)
 {
-	char const		*p = NULL;
-	CONF_SECTION		*cs = NULL, *subcs;
-	struct stat		statbuf;
-	bool			can_colourise = false;
-	char			buffer[1024];
+	char const	*p = NULL;
+	CONF_SECTION	*cs = NULL, *subcs;
+	struct stat	statbuf;
+	bool		can_colourise = false;
+	char		buffer[1024];
+	xlat_t		*xlat;
 
 	if (stat(config->raddb_dir, &statbuf) < 0) {
 		ERROR("Error checking raddb_dir \"%s\": %s", config->raddb_dir, fr_syserror(errno));
@@ -1197,7 +1200,8 @@ do {\
 	/*
 	 *	Register the %{config:section.subsection} xlat function.
 	 */
-	xlat_register_legacy(NULL, "config", xlat_config, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
+	xlat = xlat_register(NULL, "config", xlat_config, false);
+	xlat_func_mono(xlat, &xlat_config_arg);
 
 	/*
 	 *	Ensure cwd is inside the chroot.
