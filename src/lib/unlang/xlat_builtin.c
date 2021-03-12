@@ -1439,22 +1439,28 @@ static xlat_action_t xlat_func_lpad(TALLOC_CTX *ctx, fr_dcursor_t *out, request_
  *
  * @ingroup xlat_functions
  */
-static ssize_t xlat_func_map(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
-			     UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-			     request_t *request, char const *fmt)
+static xlat_action_t xlat_func_map(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+				   UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+				   fr_value_box_list_t *in)
 {
-	map_t	*map = NULL;
+	map_t		*map = NULL;
 	int		ret;
+	fr_value_box_t	*fmt_vb = fr_dlist_head(in);
+	fr_value_box_t	*vb;
 
 	tmpl_rules_t	attr_rules = {
 		.dict_def = request->dict,
 		.prefix = TMPL_ATTR_REF_PREFIX_AUTO
 	};
 
-	if (map_afrom_attr_str(request, &map, fmt, &attr_rules, &attr_rules) < 0) {
-		RPEDEBUG("Failed parsing \"%s\" as map", fmt);
-		return -1;
+	if (map_afrom_attr_str(request, &map, fmt_vb->vb_strvalue, &attr_rules, &attr_rules) < 0) {
+		RPEDEBUG("Failed parsing \"%s\" as map", fmt_vb->vb_strvalue);
+		return XLAT_ACTION_FAIL;
 	}
+
+	MEM(vb = fr_value_box_alloc(ctx, FR_TYPE_INT8, NULL, false));
+	vb->vb_int8 = 0;	/* Default fail value - changed to 1 on success */
+	fr_dcursor_append(out, vb);
 
 	switch (map->lhs->type) {
 	case TMPL_TYPE_ATTR:
@@ -1465,7 +1471,7 @@ static ssize_t xlat_func_map(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
 	default:
 		REDEBUG("Unexpected type %s in left hand side of expression",
 			fr_table_str_by_value(tmpl_type_table, map->lhs->type, "<INVALID>"));
-		return strlcpy(*out, "0", outlen);
+		return XLAT_ACTION_FAIL;
 	}
 
 	switch (map->rhs->type) {
@@ -1481,18 +1487,23 @@ static ssize_t xlat_func_map(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
 	default:
 		REDEBUG("Unexpected type %s in right hand side of expression",
 			fr_table_str_by_value(tmpl_type_table, map->rhs->type, "<INVALID>"));
-		return strlcpy(*out, "0", outlen);
+		return XLAT_ACTION_FAIL;
 	}
 
 	RINDENT();
 	ret = map_to_request(request, map, map_to_vp, NULL);
 	REXDENT();
 	talloc_free(map);
-	if (ret < 0) return strlcpy(*out, "0", outlen);
+	if (ret < 0) return XLAT_ACTION_FAIL;
 
-	return strlcpy(*out, "1", outlen);
+	vb->vb_int8 = 1;
+	return XLAT_ACTION_DONE;
 }
 
+extern xlat_arg_parser_t xlat_func_map_arg;
+xlat_arg_parser_t xlat_func_map_arg = {
+	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 /** Calculate number of seconds until the next n hour(s), day(s), week(s), year(s).
  *
@@ -3269,7 +3280,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	XLAT_REGISTER(map);
 	xlat_register_legacy(NULL, "nexttime", xlat_func_next_time, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN);
 	xlat_register_legacy(NULL, "trigger", trigger_xlat, NULL, NULL, 0, 0);	/* On behalf of trigger.c */
 	XLAT_REGISTER(xlat);
@@ -3293,6 +3303,7 @@ int xlat_init(void)
 	XLAT_REGISTER_MONO("integer", xlat_func_integer, xlat_func_integer_arg);
 	xlat_register(NULL, "length", xlat_func_length, false);
 	XLAT_REGISTER_ARGS("lpad", xlat_func_lpad, xlat_func_pad_args);
+	XLAT_REGISTER_MONO("map", xlat_func_map, xlat_func_map_arg);
 	XLAT_REGISTER_MONO("md4", xlat_func_md4, xlat_func_md4_arg);
 	XLAT_REGISTER_MONO("md5", xlat_func_md5, xlat_func_md5_arg);
 	xlat_register(NULL, "module", xlat_func_module, false);
