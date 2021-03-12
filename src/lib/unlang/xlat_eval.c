@@ -1074,10 +1074,9 @@ xlat_action_t xlat_frame_eval_repeat(TALLOC_CTX *ctx, fr_dcursor_t *out,
 			}
 			xa = node->call.func->func.async(ctx, out, request, node->call.inst->data, thread_inst->data, result);
 			if (!fr_dlist_empty(result)) { fr_dlist_verify(result); }
-			if (RDEBUG_ENABLED2) {
-				xlat_debug_log_expansion(request, *in, &result_copy);
-				fr_value_box_list_free(&result_copy);
-			}
+			if (RDEBUG_ENABLED2) xlat_debug_log_expansion(request, *in, &result_copy);
+			fr_value_box_list_free(&result_copy);
+
 			switch (xa) {
 			case XLAT_ACTION_FAIL:
 				return xa;
