@@ -60,23 +60,24 @@ typedef struct {
 /** Retrieve attributes from a special trigger list
  *
  */
-ssize_t trigger_xlat(UNUSED TALLOC_CTX *ctx, char **out, UNUSED size_t outlen,
-		     UNUSED void const *mod_inst, UNUSED void const *xlat_inst,
-		     request_t *request, char const *fmt)
+xlat_action_t trigger_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+			   UNUSED void const *xlat_inst, UNUSED void *xlat_thread_inst,
+			   fr_value_box_list_t *in)
 {
 	fr_pair_list_t		*head = NULL;
 	fr_dict_attr_t const	*da;
 	fr_pair_t		*vp;
-
+	fr_value_box_t		*in_head = fr_dlist_head(in);
+	fr_value_box_t		*vb;
 
 	if (!triggers_init) {
 		ERROR("Triggers are not enabled");
-		return -1;
+		return XLAT_ACTION_FAIL;
 	}
 
 	if (!request_data_reference(request, &trigger_exec_main, REQUEST_INDEX_TRIGGER_NAME)) {
 		ERROR("trigger xlat may only be used in a trigger command");
-		return -1;
+		return XLAT_ACTION_FAIL;
 	}
 
 	head = request_data_reference(request, &trigger_exec_main, REQUEST_INDEX_TRIGGER_ARGS);
@@ -84,21 +85,24 @@ ssize_t trigger_xlat(UNUSED TALLOC_CTX *ctx, char **out, UNUSED size_t outlen,
 	/*
 	 *	No arguments available.
 	 */
-	if (fr_pair_list_empty(head)) return -1;
+	if (fr_pair_list_empty(head)) return XLAT_ACTION_FAIL;
 
-	da = fr_dict_attr_by_name(NULL, fr_dict_root(request->dict), fmt);
+	da = fr_dict_attr_by_name(NULL, fr_dict_root(request->dict), in_head->vb_strvalue);
 	if (!da) {
-		ERROR("Unknown attribute \"%s\"", fmt);
-		return -1;
+		ERROR("Unknown attribute \"%s\"", in_head->vb_strvalue);
+		return XLAT_ACTION_FAIL;
 	}
 
 	vp = fr_pair_find_by_da(head, da);
 	if (!vp) {
-		ERROR("Attribute \"%s\" is not valid for this trigger", fmt);
-		return -1;
+		ERROR("Attribute \"%s\" is not valid for this trigger", in_head->vb_strvalue);
+		return XLAT_ACTION_FAIL;
 	}
 
-	return fr_value_box_aprint(request, out, &vp->data, NULL);
+	MEM(vb = fr_value_box_alloc_null(ctx));
+	fr_value_box_copy(ctx, vb, &vp->data);
+	fr_dcursor_append(out, vb);
+	return XLAT_ACTION_DONE;
 }
 
 static int _mutex_free(pthread_mutex_t *mutex)

@@ -3252,6 +3252,10 @@ xlat_arg_parser_t xlat_func_urlunquote_arg = {
 	.required = false, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
 };
 
+extern xlat_arg_parser_t trigger_xlat_arg;
+xlat_arg_parser_t trigger_xlat_arg = {
+	.required = true, .concat = true, .variadic = false, .type = FR_TYPE_STRING, .func = NULL, .uctx = NULL
+};
 
 /** Global initialisation for xlat
  *
@@ -3289,7 +3293,6 @@ int xlat_init(void)
 #define XLAT_REGISTER(_x) xlat = xlat_register_legacy(NULL, STRINGIFY(_x), xlat_func_ ## _x, NULL, NULL, 0, XLAT_DEFAULT_BUF_LEN); \
 	xlat_internal(xlat);
 
-	xlat_register_legacy(NULL, "trigger", trigger_xlat, NULL, NULL, 0, 0);	/* On behalf of trigger.c */
 	XLAT_REGISTER(xlat);
 
 
@@ -3350,6 +3353,7 @@ int xlat_init(void)
 	XLAT_REGISTER_ARGS("sub", xlat_func_sub, xlat_func_sub_args);
 	XLAT_REGISTER_MONO("tolower", xlat_func_tolower, xlat_func_case_arg);
 	XLAT_REGISTER_MONO("toupper", xlat_func_toupper, xlat_func_case_arg);
+	XLAT_REGISTER_MONO("trigger", trigger_xlat, trigger_xlat_arg);
 	XLAT_REGISTER_MONO("urlquote", xlat_func_urlquote, xlat_func_urlquote_arg);
 	XLAT_REGISTER_MONO("urlunquote", xlat_func_urlunquote, xlat_func_urlquote_arg);
 
