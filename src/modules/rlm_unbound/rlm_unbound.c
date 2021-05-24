@@ -546,6 +546,76 @@ error0:
 	return -1;
 }
 
+static xlat_arg_parser_t const xlat_unbound_args[] = {
+	{ .required = true, .concat = true, .type = FR_TYPE_STRING },
+	{ .required = true, .concat = true, .type = FR_TYPE_STRING },
+	{ .single = true, .type = FR_TYPE_UINT16 },
+	XLAT_ARG_PARSER_TERMINATOR
+};
+
+/** Perform a DNS lookup using libunbound
+ *
+ * @ingroup xlat_functions
+ */
+static xlat_action_t xlat_unbound(UNUSED TALLOC_CTX *ctx, UNUSED fr_dcursor_t *out, request_t *request,
+				  UNUSED void const *xlat_inst, void *xlat_thread_inst,
+				  fr_value_box_list_t *in)
+{
+	fr_value_box_t			*host_vb = fr_dlist_head(in);
+	fr_value_box_t			*query_vb = fr_dlist_next(in, host_vb);
+	fr_value_box_t			*count_vb = fr_dlist_next(in, query_vb);
+	unbound_xlat_thread_inst_t	*xt = talloc_get_type_abort(xlat_thread_inst, unbound_xlat_thread_inst_t);
+	rlm_unbound_thread_t		*t = xt->t;
+	unbound_request_t		*ur;
+
+	if (host_vb->length == 0) {
+		REDEBUG("Can't resolve zero length host");
+		return XLAT_ACTION_FAIL;
+	}
+
+	ur = talloc_zero(request, unbound_request_t);
+
+#define UB_QUERY(_record, _rrvalue, _return, _hasprio) \
+	if (strcmp(query_vb->vb_strvalue, _record) == 0) { \
+		ub_resolve_async(t->ub, host_vb->vb_strvalue, _rrvalue, 1, ur, link_ubres, &ur->async_id); \
+		ur->return_type = _return; \
+		ur->has_priority = _hasprio; \
+	}
+
+	UB_QUERY("A", 1, FR_TYPE_IPV4_ADDR, false)
+	else UB_QUERY("AAAA", 28, FR_TYPE_IPV6_ADDR, false)
+	else UB_QUERY("PTR", 12, FR_TYPE_STRING, false)
+	else UB_QUERY("MX", 15, FR_TYPE_STRING, true)
+	else UB_QUERY("SRV", 33, FR_TYPE_STRING, true)
+	else UB_QUERY("TXT", 16, FR_TYPE_STRING, false)
+	else UB_QUERY("CERT", 37, FR_TYPE_OCTETS, false)
+	else {
+		REDEBUG("Invalid / unsupported DNS query type");
+		return XLAT_ACTION_FAIL;
+	}
+
+	/*
+	 *	Set the maximum number of records we want to return
+	 */
+	if ((count_vb) && (count_vb->type == FR_TYPE_UINT16) && (count_vb->vb_uint16 > 0)) {
+		ur->count = count_vb->vb_uint16;
+	} else {
+		ur->count = UINT16_MAX;
+	}
+
+	ur->request = request;
+
+	/*
+	 *	Setup event to timeout unbound resolvers exceeding configured timeout
+	 */
+	if (fr_event_timer_in(ur, t->el, &ur->ev, fr_time_delta_from_msec(xt->inst->timeout), ub_timeout, ur) < 0) {
+		REDEBUG("Unable to attach unbound timeout event");
+		return XLAT_ACTION_FAIL;
+	}
+
+	return unlang_xlat_yield(request, xlat_unbound_resume, xlat_unbound_signal, ur);
+}
+
 static int mod_xlat_thread_instantiate(UNUSED void *xlat_inst, void *xlat_thread_inst,
 				       UNUSED xlat_exp_t const *exp, void *uctx)
 {
@@ -671,7 +741,8 @@ static int mod_thread_detach(UNUSED fr_event_list_t *el, void *thread)
 
 static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 {
-	rlm_unbound_t *inst = instance;
+	rlm_unbound_t	*inst = instance;
+	xlat_t		*xlat;
 
 	inst->name = cf_section_name2(conf);
 	if (!inst->name) inst->name = cf_section_name1(conf);
@@ -691,6 +762,10 @@ static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 		cf_log_err(conf, "Failed registering xlats");
 		return -1;
 	}
+
+	if(!(xlat = xlat_register(NULL, inst->name, xlat_unbound, false))) return -1;
+	xlat_func_args(xlat, xlat_unbound_args);
+	xlat_async_thread_instantiate_set(xlat, mod_xlat_thread_instantiate, unbound_xlat_thread_inst_t, NULL, inst);
 
 	return 0;
 }
