@@ -184,6 +184,21 @@ static int rrlabels_tostr(char *out, char *rr, size_t left)
 	return offset;
 }
 
+/*
+ *	Callback from timeout event.  Cancel the unbound reqeust.
+ */
+static void ub_timeout(UNUSED fr_event_list_t *el, UNUSED fr_time_t now, void *uctx)
+{
+	unbound_request_t	*ur = talloc_get_type_abort(uctx, unbound_request_t);
+	request_t		*request = ur->request;
+
+	REDEBUG("Timeout waiting for DNS resolution");
+	ub_cancel(ur->t->ub, ur->async_id);
+	unbound_event_cleanup(ur);
+
+	unlang_interpret_mark_runnable(request);
+}
+
 static int ub_common_wait(rlm_unbound_t const *inst, request_t *request,
 			  char const *name, struct ub_result **ub, int async_id)
 {
