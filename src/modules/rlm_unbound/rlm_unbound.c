@@ -199,6 +199,16 @@ static void ub_timeout(UNUSED fr_event_list_t *el, UNUSED fr_time_t now, void *u
 	unlang_interpret_mark_runnable(request);
 }
 
+/*
+ *	Callback from event on the unbound fd.  Simply calls ub_process to interpret results.
+ */
+static void ub_data_read(UNUSED fr_event_list_t *el, UNUSED int fd, UNUSED int flags, void *uctx)
+{
+	rlm_unbound_thread_t	*t = talloc_get_type_abort(uctx, rlm_unbound_thread_t);
+
+	ub_process(t->ub);
+}
+
 static int ub_common_wait(rlm_unbound_t const *inst, request_t *request,
 			  char const *name, struct ub_result **ub, int async_id)
 {
