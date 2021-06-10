@@ -99,24 +99,23 @@ static inline void unbound_event_cleanup(unbound_request_t *ur)
 
 /*
  *	Callback sent to libunbound for xlat functions.  Simply links the
- *	new ub_result via a pointer that has been allocated from the heap.
- *	This pointer has been pre-initialized to a magic value.
+ *	new ub_result via a pointer that has been allocated from the heap,
+ *	and marks the request as runnable
  */
 static void link_ubres(void *my_arg, int err, struct ub_result *result)
 {
-	struct ub_result **ubres = (struct ub_result **)my_arg;
+	unbound_request_t	*ur = talloc_get_type_abort(my_arg, unbound_request_t);
+	ur->done = 1;
 
-	/*
-	 *	Note that while result will be NULL on error, we are explicit
-	 *	here because that is actually a behavior that is suboptimal
-	 *	and only documented in the examples.  It could change.
-	 */
 	if (err) {
 		ERROR("%s", ub_strerror(err));
-		*ubres = NULL;
 	} else {
-		*ubres = result;
+		ur->result = result;
 	}
+
+	unbound_event_cleanup(ur);
+
+	unlang_interpret_mark_runnable(ur->request);
 }
 
 /*
