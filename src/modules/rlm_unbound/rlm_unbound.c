@@ -632,6 +632,14 @@ static int mod_thread_instantiate(UNUSED CONF_SECTION const *cs, void *instance,
 	 */
 	ub_ctx_data_remove(t->ub, "notar33lsite.foo123.nottld A 127.0.0.1");
 
+	/*
+	 *	Setup event to read the fd provided by unbound
+	 */
+	if (fr_event_fd_insert(t, t->el, ub_fd(t->ub), ub_data_read, NULL, NULL, t) < 0) {
+		PERROR("Unable to attach event to read unbound results");
+		return XLAT_ACTION_FAIL;
+	}
+
 	return 0;
 }
 
@@ -640,6 +648,7 @@ static int mod_thread_detach(UNUSED fr_event_list_t *el, void *thread)
 	rlm_unbound_thread_t	*t = talloc_get_type_abort(thread, rlm_unbound_thread_t);
 
 	ub_process(t->ub);
+	fr_event_fd_delete(t->el, ub_fd(t->ub), FR_EVENT_FILTER_IO);
 	talloc_free(t->u_log);
 	ub_ctx_delete(t->ub);
 
