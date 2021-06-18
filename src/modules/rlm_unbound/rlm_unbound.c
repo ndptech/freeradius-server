@@ -393,6 +393,20 @@ static xlat_action_t xlat_ptr(TALLOC_CTX *ctx, fr_cursor_t *out,
 */
 
 /*
+ *	Xlat signal callback if the unbound reqeust needs forcibly cancelling
+ */
+static void xlat_unbound_signal(request_t *request, UNUSED void *instance, UNUSED void *thread, void *rctx, fr_state_signal_t action)
+{
+	unbound_request_t	*ur = talloc_get_type_abort(rctx, unbound_request_t);
+
+	if (action != FR_SIGNAL_CANCEL) return;
+
+	RDEBUG2("Cancelling pending unbound request");
+	ub_cancel(ur->t->ub, ur->async_id);
+	unbound_event_cleanup(ur);
+}
+
+/*
  *	Xlat resume callback after unbound has either returned or timed out
  *	Parse the results and add to the output
  */
