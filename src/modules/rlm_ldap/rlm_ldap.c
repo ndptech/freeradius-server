@@ -374,6 +374,25 @@ static int uri_part_escape(request_t *request, fr_value_box_t *vb, UNUSED void *
 	return 0;
 }
 
+static xlat_uri_part_t const ldap_uri_parts[] = {
+	{ .name = "scheme", .terminals = &FR_SBUFF_TERMS(L(":")), .part_adv = { [':'] = 1 },
+	  .tainted_allowed = false, .extra_skip = 2 },
+	{ .name = "host", .terminals = &FR_SBUFF_TERMS(L(":"), L("/")), .part_adv = { [':'] = 1, ['/'] = 2 },
+	  .tainted_allowed = false },
+	{ .name = "port", .terminals = &FR_SBUFF_TERMS(L("/")), .part_adv = { ['/'] = 1 },
+	  .tainted_allowed = false },
+	{ .name = "dn", .terminals = &FR_SBUFF_TERMS(L("?")), .part_adv = { ['?'] = 1 },
+	  .tainted_allowed = true, .func = uri_part_escape },
+	{ .name = "attrs", .terminals = &FR_SBUFF_TERMS(L("?")), .part_adv = { ['?'] = 1 },
+	  .tainted_allowed = false },
+	{ .name = "scope", .terminals = &FR_SBUFF_TERMS(L("?")), .part_adv = { ['?'] = 1 },
+	  .tainted_allowed = true, .func = uri_part_escape },
+	{ .name = "filter", .terminals = &FR_SBUFF_TERMS(L("?")), .part_adv = { ['?'] = 1},
+	  .tainted_allowed = true, .func = uri_part_escape },
+	{ .name = "exts", .tainted_allowed = true, .func = uri_part_escape },
+	XLAT_URI_PART_TERMINATOR
+};
+
 /** Expand an LDAP URL into a query, and return a string result from that query.
  *
  * @ingroup xlat_functions
