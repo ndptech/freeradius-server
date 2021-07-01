@@ -393,17 +393,22 @@ static xlat_uri_part_t const ldap_uri_parts[] = {
 	XLAT_URI_PART_TERMINATOR
 };
 
+static xlat_arg_parser_t const ldap_xlat_arg = { .required = true, .type = FR_TYPE_STRING };
+
 /** Expand an LDAP URL into a query, and return a string result from that query.
  *
  * @ingroup xlat_functions
  */
-static ssize_t ldap_xlat(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
-			 void const *mod_inst, UNUSED void const *xlat_inst,
-			 request_t *request, char const *fmt)
+static xlat_action_t ldap_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *request,
+			       void const *xlat_inst, UNUSED void *xlat_thread_inst,
+			       fr_value_box_list_t *in)
 {
 	fr_ldap_rcode_t		status;
-	size_t			len = 0;
-	rlm_ldap_t const	*inst = mod_inst;
+	rlm_ldap_t const	*inst;
+	void			*instance;
+	fr_value_box_t		*in_vb = NULL, *vb;
+	xlat_action_t		res = XLAT_ACTION_FAIL;
+	int			count, i;
 
 	LDAPURLDesc		*ldap_url;
 	LDAPMessage		*result = NULL;
@@ -414,21 +419,29 @@ static ssize_t ldap_xlat(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
 	fr_ldap_connection_t	*conn;
 	int			ldap_errno;
 
-	char const		*url;
 	char const		**attrs;
 
 	LDAPControl		*server_ctrls[] = { NULL, NULL };
 
-	url = fmt;
+	memcpy(&instance, xlat_inst, sizeof(instance));
+	inst = talloc_get_type_abort(instance, rlm_ldap_t);
 
-	if (!ldap_is_ldap_url(url)) {
-		REDEBUG("String passed does not look like an LDAP URL");
-		return -1;
+	if (xlat_parse_uri(request, in, ldap_uri_parts, NULL) < 0) return XLAT_ACTION_FAIL;
+
+	in_vb = fr_dlist_head(in);
+	if(fr_value_box_list_concat(in_vb, in_vb, in, FR_TYPE_STRING, true) < 0) {
+		REDEBUG("Failed concattenating input");
+		return XLAT_ACTION_FAIL;
 	}
 
-	if (ldap_url_parse(url, &ldap_url)){
+	if (!ldap_is_ldap_url(in_vb->vb_strvalue)) {
+		REDEBUG("String passed does not look like an LDAP URL");
+		return XLAT_ACTION_FAIL;
+	}
+
+	if (ldap_url_parse(in_vb->vb_strvalue, &ldap_url)){
 		REDEBUG("Parsing LDAP URL failed");
-		return -1;
+		return XLAT_ACTION_FAIL;
 	}
 
 	/*
@@ -472,20 +485,27 @@ static ssize_t ldap_xlat(UNUSED TALLOC_CTX *ctx, char **out, size_t outlen,
 	if (!entry) {
 		ldap_get_option(conn->handle, LDAP_OPT_RESULT_CODE, &ldap_errno);
 		REDEBUG("Failed retrieving entry: %s", ldap_err2string(ldap_errno));
-		len = -1;
 		goto free_result;
 	}
 
-	values = ldap_get_values_len(conn->handle, entry, ldap_url->lud_attrs[0]);
-	if (!values) {
-		RDEBUG2("No \"%s\" attributes found in specified object", ldap_url->lud_attrs[0]);
-		goto free_result;
+	while (entry) {
+		values = ldap_get_values_len(conn->handle, entry, ldap_url->lud_attrs[0]);
+
+		if (!values) RDEBUG2("No \"%s\" attributes found in specified object", ldap_url->lud_attrs[0]);
+
+		count = ldap_count_values_len(values);
+		for (i = 0; i < count; i++) {
+			MEM(vb = fr_value_box_alloc_null(ctx));
+			if (fr_value_box_bstrndup(ctx, vb, NULL, values[i]->bv_val, values[i]->bv_len, true) < 0){
+				talloc_free(vb);
+				goto free_values;
+			}
+			fr_dcursor_append(out, vb);
+		}
+
+		entry = ldap_next_entry(conn->handle, entry);
 	}
-
-	if (values[0]->bv_len >= outlen) goto free_values;
-
-	memcpy(*out, values[0]->bv_val, values[0]->bv_len + 1);	/* +1 as strlcpy expects buffer size */
-	len = values[0]->bv_len;
+	res = XLAT_ACTION_DONE;
 
 free_values:
 	ldap_value_free_len(values);
@@ -496,7 +516,7 @@ free_socket:
 free_urldesc:
 	ldap_free_urldesc(ldap_url);
 
-	return len;
+	return res;
 }
 
 /*
@@ -1597,6 +1617,12 @@ static int parse_sub_section(rlm_ldap_t *inst, CONF_SECTION *parent, ldap_acct_s
 	return 0;
 }
 
+static int mod_xlat_instantiate(void *xlat_inst, UNUSED xlat_exp_t const *exp, void *uctx)
+{
+	*((void **)xlat_inst) = talloc_get_type_abort(uctx, rlm_ldap_t);
+	return 0;
+}
+
 /** Bootstrap the module
  *
  * Define attributes.
@@ -1654,7 +1680,9 @@ static int mod_bootstrap(void *instance, CONF_SECTION *conf)
 		inst->cache_da = inst->group_da;	/* Default to the group_da */
 	}
 
-	xlat_register_legacy(inst, inst->name, ldap_xlat, fr_ldap_escape_func, NULL, 0, XLAT_DEFAULT_BUF_LEN);
+	xlat = xlat_register(NULL, inst->name, ldap_xlat, false);
+	xlat_func_mono(xlat, &ldap_xlat_arg);
+	xlat_async_instantiate_set(xlat, mod_xlat_instantiate, rlm_ldap_t *, NULL, inst);
 	xlat = xlat_register(NULL, "ldap_escape", ldap_escape_xlat, false);
 	xlat_func_mono(xlat, &ldap_escape_xlat_arg);
 	xlat = xlat_register(NULL, "ldap_unescape", ldap_unescape_xlat, false);
