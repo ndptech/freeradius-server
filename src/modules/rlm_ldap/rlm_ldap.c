@@ -493,6 +493,7 @@ static xlat_action_t ldap_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out, request_t *re
 
 		if (!values) RDEBUG2("No \"%s\" attributes found in specified object", ldap_url->lud_attrs[0]);
 
+		fr_assert(values != NULL);	/* Silence clang scanner */
 		count = ldap_count_values_len(values);
 		for (i = 0; i < count; i++) {
 			MEM(vb = fr_value_box_alloc_null(ctx));
