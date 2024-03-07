@@ -143,6 +143,8 @@ typedef struct {
 	bool		log_auth_goodpass;	//!< Log successful authentications.
 	char const	*auth_badpass_msg;	//!< Additional text to append to failed auth messages.
 	char const	*auth_goodpass_msg;	//!< Additional text to append to successful auth messages.
+	tmpl_t		*auth_goodpass_tmpl;	//!< Tmpl tokenized from auth_goodpass_msg
+	tmpl_t		*auth_badpass_tmpl;	//!< Tmpl tokenized from auth_badpass_msg
 
 	char const	*denied_msg;		//!< Additional text to append if the user is already logged
 						//!< in (simultaneous use check failed).
@@ -170,6 +172,16 @@ typedef struct {
 	fr_value_box_list_head_t	proxy_state;	//!< These need to be copied into the response in exactly
 							///< the same order as they were added.
 } process_radius_request_pairs_t;
+
+/** Context for expanding auth log message
+ */
+typedef struct {
+	tmpl_t				*msg_tmpl;	//!< Tmpl to expand for extra message.
+	fr_value_box_list_t		expanded;	//!< Where to store expanded tmpl.
+	fr_pair_t			*mod_msg;	//!< Pointer to module success / failure message pair.
+	bool				log_pass;	//!< Should passwords be included in the log message.
+	char const			*fmt;		//!< Text part of auth message.
+} auth_msg_ctx_t;
 
 #define FR_RADIUS_PROCESS_CODE_VALID(_x) (FR_RADIUS_PACKET_CODE_VALID(_x) || (_x == FR_RADIUS_CODE_DO_NOT_RESPOND))
 
@@ -291,33 +303,25 @@ static char *auth_name(char *buf, size_t buflen, request_t *request)
  *	Make sure user/pass are clean and then create an attribute
  *	which contains the log message.
  */
-static void CC_HINT(format (printf, 4, 5)) auth_message(process_radius_auth_t const *inst,
-							request_t *request, bool goodpass, char const *fmt, ...)
+RESUME(auth_log)
 {
-	va_list		 ap;
-
-	bool		logit;
-	char const	*extra_msg = NULL;
+	process_radius_t const	*inst = talloc_get_type_abort_const(mctx->inst->data, process_radius_t);
+	auth_msg_ctx_t		*msg_ctx = talloc_get_type_abort(mctx->rctx, auth_msg_ctx_t);
 
 	char		password_buff[128];
 	char const	*password_str = NULL;
 
 	char		buf[1024];
-	char		extra[1024];
-	char		*p;
-	char		*msg;
+	char const	*msg = "";
+	char		*msg_buff = NULL;
 	fr_pair_t	*username = NULL;
 	fr_pair_t	*password = NULL;
-
-	/*
-	 *	No logs?  Then no logs.
-	 */
-	if (!inst->log_auth) return;
+	fr_value_box_t	*extra_msg = fr_value_box_list_head(&msg_ctx->expanded);
 
 	/*
 	 * Get the correct username based on the configured value
 	 */
-	if (!inst->log_stripped_names) {
+	if (!inst->auth.log_stripped_names) {
 		username = fr_pair_find_by_da(&request->request_pairs, NULL, attr_user_name);
 	} else {
 		username = fr_pair_find_by_da(&request->request_pairs, NULL, attr_stripped_user_name);
@@ -327,7 +331,7 @@ static void CC_HINT(format (printf, 4, 5)) auth_message(process_radius_auth_t co
 	/*
 	 *	Clean up the password
 	 */
-	if (inst->log_auth_badpass || inst->log_auth_goodpass) {
+	if (msg_ctx->log_pass) {
 		password = fr_pair_find_by_da(&request->request_pairs, NULL, attr_user_password);
 		if (!password) {
 			fr_pair_t *auth_type;
@@ -345,38 +349,22 @@ static void CC_HINT(format (printf, 4, 5)) auth_message(process_radius_auth_t co
 		}
 	}
 
-	if (goodpass) {
-		logit = inst->log_auth_goodpass;
-		extra_msg = inst->auth_goodpass_msg;
-	} else {
-		logit = inst->log_auth_badpass;
-		extra_msg = inst->auth_badpass_msg;
-	}
+	if (msg_ctx->mod_msg) msg = msg_buff = fr_asprintf(request, " (%pV)", &msg_ctx->mod_msg->data);
 
-	if (extra_msg) {
-		extra[0] = ' ';
-		p = extra + 1;
-		if (xlat_eval(p, sizeof(extra) - 1, request, extra_msg, NULL, NULL) < 0) return;
-	} else {
-		*extra = '\0';
-	}
-
-	/*
-	 *	Expand the input message
-	 */
-	va_start(ap, fmt);
-	msg = fr_vasprintf(request, fmt, ap);
-	va_end(ap);
-
-	RAUTH("%s: [%pV%s%pV] (%s)%s",
+	RAUTH("%s%s: [%pV%s%pV] (%s)%s%s",
+	      msg_ctx->fmt,
 	      msg,
 	      username ? &username->data : fr_box_strvalue("<no User-Name attribute>"),
-	      logit ? "/" : "",
-	      logit ? (password_str ? fr_box_strvalue(password_str) : &password->data) : fr_box_strvalue(""),
+	      msg_ctx->log_pass ? "/" : "",
+	      msg_ctx->log_pass ? (password_str ? fr_box_strvalue(password_str) : &password->data) : fr_box_strvalue(""),
 	      auth_name(buf, sizeof(buf), request),
-	      extra);
+	      extra_msg ? " " : "",
+	      extra_msg ? extra_msg->vb_strvalue : "");
 
-	talloc_free(msg);
+	talloc_free(msg_buff);
+	talloc_free(msg_ctx);
+
+	RETURN_MODULE_OK;
 }
 
 /** Keep a copy of some attributes to keep them from being tamptered with
@@ -701,15 +689,9 @@ RESUME(access_accept)
 {
 	fr_pair_t			*vp;
 	process_radius_t const		*inst = talloc_get_type_abort_const(mctx->inst->data, process_radius_t);
+	auth_msg_ctx_t			*msg_ctx;
 
 	PROCESS_TRACE;
-
-	vp = fr_pair_find_by_da(&request->request_pairs, NULL, attr_module_success_message);
-	if (vp) {
-		auth_message(&inst->auth, request, true, "Login OK (%pV)", &vp->data);
-	} else {
-		auth_message(&inst->auth, request, true, "Login OK");
-	}
 
 	/*
 	 *	Check that there is a name which can be used to
@@ -728,26 +710,51 @@ RESUME(access_accept)
 
 	fr_state_discard(inst->auth.state_tree, request);
 	radius_request_pairs_to_reply(request, mctx->rctx);
-	RETURN_MODULE_OK;
+
+	if (!inst->auth.log_auth) RETURN_MODULE_OK;
+
+	MEM(msg_ctx = talloc(request, auth_msg_ctx_t));
+	*msg_ctx = (auth_msg_ctx_t) {
+		.mod_msg = fr_pair_find_by_da(&request->request_pairs, NULL, attr_module_success_message),
+		.msg_tmpl = inst->auth.auth_goodpass_tmpl,
+		.log_pass = inst->auth.log_auth_goodpass,
+		.fmt = "Login OK"
+	};
+	fr_value_box_list_init(&msg_ctx->expanded);
+
+	if (msg_ctx->msg_tmpl) return unlang_module_yield_to_tmpl(msg_ctx, &msg_ctx->expanded, request,
+								  msg_ctx->msg_tmpl, NULL, resume_auth_log,
+								  NULL, 0, msg_ctx);
+
+	return resume_auth_log(p_result, &(module_ctx_t) {.inst = mctx->inst, .rctx = msg_ctx}, request);
 }
 
 RESUME(access_reject)
 {
-	fr_pair_t			*vp;
 	process_radius_t const		*inst = talloc_get_type_abort_const(mctx->inst->data, process_radius_t);
+	auth_msg_ctx_t			*msg_ctx;
 
 	PROCESS_TRACE;
 
-	vp = fr_pair_find_by_da(&request->request_pairs, NULL, attr_module_failure_message);
-	if (vp) {
-		auth_message(&inst->auth, request, false, "Login incorrect (%pV)", &vp->data);
-	} else {
-		auth_message(&inst->auth, request, false, "Login incorrect");
-	}
-
 	fr_state_discard(inst->auth.state_tree, request);
 	radius_request_pairs_to_reply(request, mctx->rctx);
-	RETURN_MODULE_OK;
+
+	if (!inst->auth.log_auth) RETURN_MODULE_OK;
+
+	MEM(msg_ctx = talloc(request, auth_msg_ctx_t));
+	*msg_ctx = (auth_msg_ctx_t) {
+		.mod_msg = fr_pair_find_by_da(&request->request_pairs, NULL, attr_module_failure_message),
+		.msg_tmpl = inst->auth.auth_badpass_tmpl,
+		.log_pass = inst->auth.log_auth_badpass,
+		.fmt = "Login incorrect"
+	};
+	fr_value_box_list_init(&msg_ctx->expanded);
+
+	if (msg_ctx->msg_tmpl) return unlang_module_yield_to_tmpl(msg_ctx, &msg_ctx->expanded, request,
+								  msg_ctx->msg_tmpl, NULL, resume_auth_log,
+								  NULL, 0, msg_ctx);
+
+	return resume_auth_log(p_result, &(module_ctx_t) {.inst = mctx->inst, .rctx = msg_ctx}, request);
 }
 
 RESUME(access_challenge)
@@ -1002,10 +1009,31 @@ static xlat_action_t xlat_func_radius_secret_verify(TALLOC_CTX *ctx, fr_dcursor_
 static int mod_instantiate(module_inst_ctx_t const *mctx)
 {
 	process_radius_t	*inst = talloc_get_type_abort(mctx->inst->data, process_radius_t);
+	tmpl_rules_t		t_rules = (tmpl_rules_t) {
+					.attr = {
+						.dict_def = dict_radius,
+						.list_def = request_attr_request,
+					},
+					.cast = FR_TYPE_STRING
+				};
 
 	inst->auth.state_tree = fr_state_tree_init(inst, attr_state, main_config->spawn_workers, inst->auth.max_session,
 						   inst->auth.session_timeout, inst->auth.state_server_id,
 						   fr_hash_string(cf_section_name2(inst->server_cs)));
+
+	if (!inst->auth.log_auth) return 0;
+
+	if (inst->auth.auth_goodpass_msg) {
+		if (tmpl_afrom_substr(inst, &inst->auth.auth_goodpass_tmpl,
+				  &FR_SBUFF_IN(inst->auth.auth_goodpass_msg, talloc_array_length(inst->auth.auth_goodpass_msg) - 1),
+				  T_DOUBLE_QUOTED_STRING, NULL, &t_rules) < 0) return -1;
+	}
+
+	if (inst->auth.auth_badpass_msg) {
+		if (tmpl_afrom_substr(inst, &inst->auth.auth_badpass_tmpl,
+				  &FR_SBUFF_IN(inst->auth.auth_badpass_msg, talloc_array_length(inst->auth.auth_badpass_msg) - 1),
+				  T_DOUBLE_QUOTED_STRING, NULL, &t_rules) < 0) return -1;
+	}
 
 	return 0;
 }
