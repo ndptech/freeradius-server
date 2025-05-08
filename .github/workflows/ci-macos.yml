@@ -98,7 +98,7 @@ jobs:
           mariadb \
           make \
           mruby \
-          openssl \
+          openssl@3.0 \
           python@3.10 \
           talloc
         ln -s `brew --prefix`/opt/make/bin/gmake /usr/local/bin/make
@@ -133,7 +133,7 @@ jobs:
     #
     - name: Set path for OpenSSL
       run: |
-        echo "PATH=`brew --prefix openssl`/bin/:$PATH" >> $GITHUB_ENV
+        echo "PATH=`brew --prefix openssl@3.0`/bin/:$PATH" >> $GITHUB_ENV
 
     #
     #  Build using some alternative libraries
