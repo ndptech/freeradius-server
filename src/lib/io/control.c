@@ -176,7 +176,7 @@ fr_control_t *fr_control_create(TALLOC_CTX *ctx, fr_event_list_t *el, fr_atomic_
  * 	- -1 on failure
  */
 int fr_control_open(fr_control_t *c) {
-	if (pipe((int *) &c->pipe) < 0) {
+	if (pipe((int *) c->pipe) < 0) {
 		talloc_free(c);
 		fr_strerror_printf("Failed opening pipe for control socket: %s", fr_syserror(errno));
 		return -1;
