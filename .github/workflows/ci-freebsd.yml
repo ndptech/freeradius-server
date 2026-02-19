@@ -97,9 +97,8 @@ jobs:
           gmake -j `nproc`
           echo 'set -g tmate-server-rsa-fingerprint   "SHA256:Hthk2T/M/Ivqfk1YYUn5ijC2Att3+UPzD7Rn72P5VWs"' > ~/.tmate.conf
           echo 'set -g tmate-server-ecdsa-fingerprint "SHA256:8GmKHYHEJ6n0TEdciHeEGkKOigQfCFuBULdt6vZIhDc"' >> ~/.tmate.conf
-          gmake -j `nproc` test.keywords test.unit test.modules test.auth test.digest
-          gmake test || true
-          tmate -F
+          gmake -j `nproc` test.keywords test.unit test.modules test.auth test.digest || tmate -F
+          gmake test || tmate -F
 
     #
     #  If the CI has failed and the branch is ci-debug then we start a tmate
