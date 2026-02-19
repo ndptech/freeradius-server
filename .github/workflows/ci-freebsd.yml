@@ -85,6 +85,7 @@ jobs:
             postgresql14-client  \
             sqlite3              \
             talloc               \
+            tmate                \
             unixODBC
           PIP_BREAK_SYSTEM_PACKAGES=1 pip install tacacs_plus
           echo "#! /bin/sh"        | sudo tee /usr/local/bin/nproc
@@ -94,6 +95,9 @@ jobs:
           cd freeradius
           ./configure
           gmake -j `nproc`
+          echo 'set -g tmate-server-rsa-fingerprint   "SHA256:Hthk2T/M/Ivqfk1YYUn5ijC2Att3+UPzD7Rn72P5VWs"' > ~/.tmate.conf
+          echo 'set -g tmate-server-ecdsa-fingerprint "SHA256:8GmKHYHEJ6n0TEdciHeEGkKOigQfCFuBULdt6vZIhDc"' >> ~/.tmate.conf
+          tmate -F
           gmake -j `nproc` test.keywords test.unit test.modules test.auth test.digest
           gmake test
 
