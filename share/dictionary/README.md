@@ -48,6 +48,7 @@ PROTOCOL        TLS             10
 PROTOCOL        DNS             11
 PROTOCOL        LDAP            12
 PROTOCOL        BFD		13
+PROTOCOL        CRL             14
 PROTOCOL        EAP-SIM         101
 PROTOCOL        EAP-AKA         102
 PROTOCOL        EAP-FAST         103

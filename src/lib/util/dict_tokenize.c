@@ -2865,6 +2865,7 @@ static fr_table_num_ordered_t const dict_proto_table[] = {
 	{ L("DNS"),		FR_DICT_PROTO_DNS },
 	{ L("LDAP"),		FR_DICT_PROTO_LDAP },
 	{ L("BFD"),		FR_DICT_PROTO_BFD },
+	{ L("CRL"),		FR_DICT_PROTO_CRL },
 };
 static size_t const dict_proto_table_len = NUM_ELEMENTS(dict_proto_table);
 

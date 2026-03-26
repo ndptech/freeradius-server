@@ -171,6 +171,7 @@ typedef enum {
 	FR_DICT_PROTO_DNS = 11,
 	FR_DICT_PROTO_LDAP = 12,
 	FR_DICT_PROTO_BFD = 13,
+	FR_DICT_PROTO_CRL = 14,
 } fr_dict_protocol_id_t;
 
 extern fr_dict_gctx_t *dict_gctx;
