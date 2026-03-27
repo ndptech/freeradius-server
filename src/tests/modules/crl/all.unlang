@@ -83,16 +83,20 @@ if (!ok) {
 }
 
 #
-#  And advance time beyond the forced CRL refresh interval
-#
-%time.advance(10s)
-
-#
 #  Now revoke the cert and update the crl
 #
 revoke_client_cert
 
 build_crl
+
+%crl.refresh(session-state.TLS-Certificate.X509v3-CRL-Distribution-Points)
+
+#
+#  Do something that yields the request twice so that the event loop will
+#  run the refresh in the coordinator, then the worker will read the refreshed
+#  CRL.  This is a work around for tests being run in a synchronous interpreter.
+%delay(0.1)
+%delay(0.1)
 
 crl {
 	reject = 1
