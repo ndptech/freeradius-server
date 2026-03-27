@@ -43,6 +43,19 @@ lease_time:: How long a lease is allocated.
 
 
 
+association_time:: How long the owner -> IP association should be kept.
+
+If this is set, and the value is greater than `lease_time` then the
+association between the "owner" and an IP address will be kept for
+this many seconds after the allocation / most recent renewal.
+
+This allows for "sticky" addressing, where a request for an address
+will return the last one allocated to the owner if it is within this
+number of seconds of the allocation / most recent renewal and the
+address has not been allocated to another owner.
+
+
+
 wait_num:: How many slaves we want to acknowledge allocations or updates.
 
 
@@ -141,6 +154,7 @@ redis_ippool {
 	pool_name = control.IP-Pool.Name
 	offer_time = 30
 	lease_time = 3600
+#	association_time = 7200
 #	wait_num = 10
 #	wait_timeout = 2
 #	gateway = NAS-Identifier
