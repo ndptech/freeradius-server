@@ -112,6 +112,15 @@ int fr_schedule_worker_id(void)
 	return worker_id;
 }
 
+/** Explicitly set the worker id for the current thread
+ *
+ * **Only to be used in test programs like unit_test_module**
+ */
+void fr_schedule_worker_id_set(int id)
+{
+	worker_id = id;
+}
+
 /** Entry point for worker threads
  *
  * @param[in] arg	the fr_schedule_worker_t

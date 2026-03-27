@@ -75,6 +75,8 @@ typedef struct {
 
 int			fr_schedule_worker_id(void);
 
+void			fr_schedule_worker_id_set(int id);
+
 fr_schedule_t		*fr_schedule_create(TALLOC_CTX *ctx, bool single_threaded, fr_event_list_t *el,
 					    fr_log_t *log, fr_log_lvl_t lvl,
 					    fr_schedule_thread_instantiate_t worker_thread_instantiate,
