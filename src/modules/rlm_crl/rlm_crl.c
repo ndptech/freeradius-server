@@ -32,6 +32,8 @@ RCSID("$Id$")
 #include <freeradius-devel/tls/strerror.h>
 #include <freeradius-devel/tls/utils.h>
 
+#include <freeradius-devel/unlang/xlat_func.h>
+
 #include <openssl/x509v3.h>
 
 /** Thread specific structure to hold requests awaiting CRL fetching */
@@ -168,6 +170,72 @@ static int8_t crl_fail_cmp(void const *a, void const *b)
 	crl_fail_t	const *fail_b = (crl_fail_t const *)b;
 
 	return CMP(strcmp(fail_a->cdp_url, fail_b->cdp_url), 0);
+}
+
+static xlat_arg_parser_t const crl_refresh_xlat_arg[] = {
+	{ .required=true, .concat = true, .type = FR_TYPE_STRING },
+	{ .concat = true, .type = FR_TYPE_STRING },
+	XLAT_ARG_PARSER_TERMINATOR
+};
+
+/** Forcibly trigger refresh of a CRL
+ *
+ * Example:
+ @verbatim
+ %crl.refresh('http://example.com/ca.crl')
+ @endverbatim
+ *
+ * @ingroup xlat_functions
+ */
+static xlat_action_t crl_refresh_xlat(TALLOC_CTX *ctx, fr_dcursor_t *out, xlat_ctx_t const *xctx,
+				      UNUSED request_t *request, fr_value_box_list_t *args)
+{
+	rlm_crl_t const		*inst = talloc_get_type_abort(xctx->mctx->mi->data, rlm_crl_t);
+	rlm_crl_thread_t	*t = talloc_get_type_abort(xctx->mctx->thread, rlm_crl_thread_t);
+	fr_value_box_t		*vb, *url, *base_crl;
+	fr_pair_list_t		list;
+	fr_pair_t		*vp;
+	TALLOC_CTX		*local = talloc_new(NULL);
+	int			ret;
+	crl_entry_t		find, *found;
+	XLAT_ARGS(args, &url, &base_crl);
+
+	fr_pair_list_init(&list);
+	fr_pair_list_append_by_da(local, vp, &list, attr_packet_type, (uint32_t)FR_CRL_CRL_REFRESH, false);
+	if (!vp) {
+	error:
+		talloc_free(local);
+		return XLAT_ACTION_FAIL;
+	}
+
+	if (fr_pair_append_by_da(local, &vp, &list, attr_crl_cdp_url) < 0) goto error;
+	if (fr_value_box_copy(vp, &vp->data, url) < 0) goto error;
+
+	if (base_crl) {
+		if (fr_pair_append_by_da(local, &vp, &list, attr_base_crl) < 0) goto error;
+		if (fr_value_box_copy(vp, &vp->data, base_crl) < 0) goto error;
+	}
+
+	ret = fr_worker_to_coord_pair_send(t->cw, inst->coord_pair_reg, &list);
+
+	talloc_free(local);
+
+	if (ret < 0) return XLAT_ACTION_FAIL;
+
+	find = (crl_entry_t) {
+		.cdp_url = url->vb_strvalue
+	};
+	found = fr_rb_find(&t->crls, &find);
+	if (found) {
+		fr_rb_remove(&t->crls, found);
+		talloc_free(found);
+	}
+
+	MEM(vb = fr_value_box_alloc(ctx, FR_TYPE_BOOL, NULL));
+	vb->vb_bool = true;
+	fr_dcursor_append(out, vb);
+
+	return XLAT_ACTION_DONE;
 }
 
 /** See if a particular serial is present in a CRL list
@@ -536,6 +604,17 @@ static int mod_thread_detach(module_thread_inst_ctx_t const *mctx)
 	return 0;
 }
 
+static int mod_bootstrap(module_inst_ctx_t const *mctx)
+{
+	xlat_t			*xlat;
+
+	if (unlikely(!(xlat = module_rlm_xlat_register(mctx->mi->boot, mctx, "refresh", crl_refresh_xlat,
+						       FR_TYPE_BOOL)))) return -1;
+	xlat_func_args_set(xlat, crl_refresh_xlat_arg);
+
+	return 0;
+}
+
 static int mod_detach(module_detach_ctx_t const *mctx)
 {
 	rlm_crl_t	*inst = talloc_get_type_abort(mctx->mi->data, rlm_crl_t);
@@ -611,6 +690,7 @@ module_rlm_t rlm_crl = {
 		.thread_instantiate	= mod_thread_instantiate,
 		.thread_detach		= mod_thread_detach,
 		.coord_attach		= mod_coord_attach,
+		.bootstrap	= mod_bootstrap,
 		.detach		= mod_detach,
 #endif
 	},
