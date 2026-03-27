@@ -46,6 +46,7 @@ typedef struct {
 
 typedef struct {
 	fr_time_delta_t			retry_delay;			//!< Time to hold off between CRL fetching failures.
+	char const			**urls;				//!< Initial list of URLs to fetch.
 	fr_coord_pair_reg_t		*coord_pair_reg;		//!< coord_pair registration for fetching CRLs.
 	fr_coord_reg_t			*coord_reg;			//!< coord registration for fetching CRLs.
 } rlm_crl_t;
@@ -89,6 +90,7 @@ typedef struct {
 
 static conf_parser_t module_config[] = {
 	{ FR_CONF_OFFSET("retry_delay", rlm_crl_t, retry_delay), .dflt = "30s" },
+	{ FR_CONF_OFFSET_FLAGS("url", CONF_FLAG_MULTI, rlm_crl_t, urls) },
 	CONF_PARSER_TERMINATOR
 };
 
@@ -582,12 +584,36 @@ static int mod_coord_attach(module_thread_inst_ctx_t const *mctx)
 {
 	rlm_crl_thread_t	*t = talloc_get_type_abort(mctx->thread, rlm_crl_thread_t);
 	rlm_crl_t		*inst = talloc_get_type_abort(mctx->mi->data, rlm_crl_t);
+	size_t			i;
 
 	t->cw = fr_coord_attach(t, mctx->el, inst->coord_reg);
 
 	if (!t->cw) {
 		ERROR("Failed to attach to coordinator");
 		return -1;
+	}
+
+	if (fr_schedule_worker_id() != 0) return 0;
+
+	/*
+	 *	If any urls have been configured to pre-load, trigger those from
+	 *	worker ID 0.
+	 */
+	if (!inst->urls) return 0;
+
+	for (i = 0; i < talloc_array_length(inst->urls); i++) {
+		fr_value_box_list_t	list;
+		fr_value_box_t		vb;
+
+		DEBUG2("Pre-fetching CRL from %s", inst->urls[i]);
+		fr_value_box_list_init(&list);
+		fr_value_box_init(&vb, FR_TYPE_STRING, NULL, false);
+		fr_value_box_strdup_shallow(&vb, NULL, inst->urls[i], false);
+		fr_value_box_list_insert_head(&list, &vb);
+		if (crl_fetch_start(inst, t, &list, NULL) < 0) {
+			ERROR("Failed to initiate fetch for %s", inst->urls[i]);
+			return -1;
+		}
 	}
 
 	return 0;

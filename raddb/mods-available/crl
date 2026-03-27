@@ -29,6 +29,26 @@ crl {
 	virtual_server = crl
 
 	#
+	#  url:: URL to fetch CRL data from when the server starts.
+	#
+	#  The CRL used during certificate verification is determined by the
+	#  X509v3 CRL Distribution Points extension within the certificate.
+	#  If a given CRL has not already been fetched when a certificate
+	#  requires verification, then it will be fetched.
+	#
+	#  If the CRL distribution points which will be needed are known
+	#  then they can be configured using one or more instance of this
+	#  option.
+	#
+	#  These distribution points will be fetched during server startup.
+	#
+	#  Only base CRL distribution points should be listed here.  Deltas
+	#  which they refer to will automatically be fetched.
+	#
+#	url = http://example.com/ca.crl
+#	url = ldap://ldap.example.com/cn=example%20CA,dc=example,dc=com?certificateRevocationList;binary
+
+	#
 	#  retry_delay:: How long to wait before retrying a fetch failure.
 	#
 #	retry_delay = 30s
