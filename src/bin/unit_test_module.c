@@ -1031,11 +1031,29 @@ int main(int argc, char *argv[])
 	fr_assert(el != NULL);
 	fr_timer_list_set_time_func(el->tl, _synthetic_time_source);
 
+	fr_coords_create(autofree, el);
+
 	/*
 	 *	Simulate thread specific instantiation
 	 */
+	fr_schedule_worker_id_set(0);
 	if (fr_thread_instantiate(thread_ctx, el) < 0) {
 		fr_perror("%s", config->name);
+		EXIT_WITH_FAILURE;
+	}
+
+	if (modules_rlm_coord_attach(el) < 0) {
+		fr_perror("%s", config->name);
+		EXIT_WITH_FAILURE;
+	}
+
+	if (fr_coord_pre_event_insert(el) < 0) {
+		fr_strerror_const("Failed adding coordinator pre-check to event list");
+		EXIT_WITH_FAILURE;
+	}
+
+	if (fr_coord_post_event_insert(el) < 0) {
+		fr_strerror_const("Failed adding coordinator pre-check to event list");
 		EXIT_WITH_FAILURE;
 	}
 
@@ -1258,6 +1276,8 @@ cleanup:
 	 *	Free thread data
 	 */
 	talloc_free(thread_ctx);
+
+	fr_coords_destroy();
 
 	/*
 	 *	Ensure all thread local memory is cleaned up
