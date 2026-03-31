@@ -97,6 +97,9 @@ typedef struct {
 	char const			*ca_file;			//!< File containing certs for verifying CRL signatures.
 	char const			*ca_path;			//!< Directory containing certs for verifying CRL signatures.
 
+	bool				allow_expired;			//!< Will CRLs be accepted after nextUpdate
+	bool				allow_not_yet_valid;		//!< Will CRLs be accepted before lastUpdate
+
 	X509_STORE			*verify_store;	//!< Store of certificates to verify CRL signatures;
 
 	process_crl_mutable_t		*mutable;	//!< Mutable data
@@ -113,6 +116,8 @@ static const conf_parser_t config[] = {
 	{ FR_CONF_OFFSET("retry_delay", process_crl_t, retry_delay), .dflt = "30s" },
 	{ FR_CONF_OFFSET("ca_file", process_crl_t, ca_file) },
 	{ FR_CONF_OFFSET("ca_path", process_crl_t, ca_path) },
+	{ FR_CONF_OFFSET("allow_expired", process_crl_t, allow_expired) },
+	{ FR_CONF_OFFSET("allow_not_yet_valid", process_crl_t, allow_not_yet_valid) },
 	CONF_PARSER_TERMINATOR
 };
 
@@ -300,9 +305,10 @@ RECV(crl_fetch)
 	rctx->crl_entry = crl_entry = fr_rb_find(&inst->mutable->crls, &find);
 
 	/*
-	 *	If we found the data, send it back without running the process section.
+	 *	If we found the data, send it back without running the process section as long as it's not expired.
 	 */
-	if (crl_entry) {
+	if (crl_entry && (inst->allow_expired || fr_time_gt(fr_time_from_sec(crl_entry->next_update),
+							    fr_time_from_sec(time(NULL))))) {
 		if (fr_pair_append_by_da(request->reply_ctx, &vp, &request->reply_pairs,
 					 attr_crl_data) < 0) return CALL_SEND_TYPE(FR_CRL_FETCH_FAIL);
 		fr_value_box_memdup_buffer(vp, &vp->data, NULL, crl_entry->crl_data, false);
@@ -505,6 +511,17 @@ RESUME(crl_fetch)
 	crl_entry->type = rctx->base_crl ? CRL_TYPE_DELTA : CRL_TYPE_BASE;
 	talloc_set_destructor(crl_entry, _crl_entry_free);
 
+	if (fr_tls_utils_asn1time_to_epoch(&crl_entry->next_update, X509_CRL_get0_nextUpdate(crl)) < 0) {
+		RPERROR("Failed to parse nextUpdate from CRL");
+		goto error;
+	}
+
+	if (!inst->allow_expired && fr_time_lt(fr_time_from_sec(crl_entry->next_update),
+					       fr_time_from_sec(time(NULL)))) {
+		RPERROR("Fetched CRL expired at %pV", fr_box_time(fr_time_from_sec(crl_entry->next_update)));
+		goto error;
+	}
+
 	crl_entry->crl_num = X509_CRL_get_ext_d2i(crl, NID_crl_number, &i, NULL);
 	if (!crl_entry->crl_num) {
 		fr_tls_strerror_printf("Missing CRL number");
@@ -605,8 +622,9 @@ RESUME(crl_fetch)
 		goto error;
 	}
 
-	if (fr_tls_utils_asn1time_to_epoch(&crl_entry->next_update, X509_CRL_get0_nextUpdate(crl)) < 0) {
-		RPERROR("Failed to parse nextUpdate from CRL");
+	if (!inst->allow_not_yet_valid && fr_time_gt(fr_time_from_sec(crl_entry->last_update),
+						     fr_time_from_sec(time(NULL)))) {
+		RPERROR("Fetched CRL is not valid until %pV", fr_box_time(fr_time_from_sec(crl_entry->last_update)));
 		goto error;
 	}
 
