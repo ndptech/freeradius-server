@@ -14,6 +14,7 @@ VALUE	Packet-Type			CRL-Fetch		1
 VALUE	Packet-Type			CRL-Refresh		2
 VALUE	Packet-Type			Fetch-OK		3
 VALUE	Packet-Type			Fetch-Fail		4
+VALUE	Packet-Type			CRL-Expire		5
 VALUE	Packet-Type			Do-Not-Respond		255
 
 ATTRIBUTE	CDP-URL					3	string

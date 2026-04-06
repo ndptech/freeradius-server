@@ -756,14 +756,49 @@ RESUME_FLAG(send_crl_ok, UNUSED,)
 RESUME_FLAG(send_crl_fail, UNUSED,)
 {
 	process_crl_t		*inst = talloc_get_type_abort(mctx->mi->data, process_crl_t);
+	process_thread_crl_t	*thread = talloc_get_type_abort(mctx->thread, process_thread_crl_t);
 	process_crl_rctx_t	*rctx = talloc_get_type_abort(mctx->rctx, process_crl_rctx_t);
 	fr_pair_t		*vp;
 
-	/*
-	 *	Refresh requests are local to the coordinator, so there
-	 *	is nothing to send back on a failure.
-	 */
-	if (rctx->refresh) return UNLANG_ACTION_CALCULATE_RESULT;
+	if (rctx->refresh) {
+		crl_fetching_entry_remove(&inst->mutable->fetching, rctx->cdp_url);
+
+		/*
+		 *	Set up retry of failed refresh.
+		 */
+		RDEBUG2("Refresh of CRL from %s will retry in %pVs", rctx->cdp_url, fr_box_time_delta(inst->retry_delay));
+
+		if (fr_timer_in(rctx->crl_entry, thread->el->tl, &rctx->crl_entry->ev, inst->retry_delay,
+				false, crl_refresh_event, rctx->crl_entry) <0) {
+			RERROR("Failed to set timer to retry CRL fetch");
+		}
+
+		/*
+		 *	Refresh requests are local to the coordinator, so there
+		 *	is nothing to send back on a failure, unless the CRL has
+		 *	expired and expired CRLs are not allowed.
+		 */
+		if (inst->allow_expired || fr_time_gt(fr_time_from_sec(rctx->crl_entry->next_update),
+						      fr_time_from_sec(time(NULL)))) {
+			return UNLANG_ACTION_CALCULATE_RESULT;
+		}
+
+		/*
+		 *	A refresh failed on an expired CRL, notify all workers with a CRL-Expire reply.
+		 */
+		fr_pair_list_free(&request->reply_pairs);
+		if (fr_pair_append_by_da(request->reply_ctx, &vp, &request->reply_pairs,
+					 attr_packet_type) < 0) RETURN_UNLANG_FAIL;
+		vp->vp_uint32 = FR_CRL_CRL_EXPIRE;
+
+		if (fr_pair_append_by_da(request->reply_ctx, &vp, &request->reply_pairs,
+					 attr_crl_cdp_url) < 0) RETURN_UNLANG_FAIL;
+		fr_value_box_strdup(vp, &vp->data, NULL, rctx->cdp_url, false);
+
+		fr_coord_to_worker_reply_broadcast(request);
+
+		return UNLANG_ACTION_CALCULATE_RESULT;
+	}
 
 	/*
 	 *	The fetch failed, ensure we don't send CRL data back

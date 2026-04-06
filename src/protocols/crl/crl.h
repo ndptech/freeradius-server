@@ -33,6 +33,7 @@ typedef enum {
 	FR_CRL_CRL_REFRESH,
 	FR_CRL_FETCH_OK,
 	FR_CRL_FETCH_FAIL,
+	FR_CRL_CRL_EXPIRE,
 	FR_CRL_CODE_MAX,
 	FR_CRL_DO_NOT_RESPOND = 255
 } fr_crl_packet_code_t;

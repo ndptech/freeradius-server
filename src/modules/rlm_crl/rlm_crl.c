@@ -569,6 +569,46 @@ static void recv_crl_fail(UNUSED fr_coord_worker_t *cw, UNUSED fr_coord_pair_reg
 	crl_pending_resume(thread);
 }
 
+/** Callback for worker receiving CRL-Expire packet from coordinator
+ */
+static void recv_crl_expire(UNUSED fr_coord_worker_t *cw, UNUSED fr_coord_pair_reg_t *coord_pair_reg,
+			    fr_pair_list_t const *list, UNUSED fr_time_t now, module_ctx_t *mctx, UNUSED void *uctx)
+{
+	fr_pair_t		*vp;
+	rlm_crl_thread_t	*thread = talloc_get_type_abort(mctx->thread, rlm_crl_thread_t);
+	crl_entry_t		*crl_entry, find;
+
+	vp = fr_pair_find_by_da(list, NULL, attr_crl_cdp_url);
+	if (!vp) return;
+
+	find = (crl_entry_t) {
+		.cdp_url = vp->vp_strvalue
+	};
+
+	crl_entry = fr_rb_find(&thread->crls, &find);
+
+	if (!crl_entry) return;
+
+	/*
+	 *	If the expired CRL has any deltas, remove them as well.
+	 */
+	fr_value_box_list_foreach(&crl_entry->delta_urls, delta) {
+		crl_entry_t	*delta_entry;
+
+		find.cdp_url = delta->vb_strvalue;
+		delta_entry = fr_rb_find(&thread->crls, &find);
+		if (!delta_entry) continue;
+
+		WARN("Delta CRL %s expired", delta_entry->cdp_url);
+		fr_rb_remove(&thread->crls, delta_entry);
+		talloc_free(delta_entry);
+	}
+
+	WARN("CRL %s expired", crl_entry->cdp_url);
+	fr_rb_remove(&thread->crls, crl_entry);
+	talloc_free(crl_entry);
+}
+
 static int mod_thread_instantiate(module_thread_inst_ctx_t const *mctx)
 {
 	rlm_crl_thread_t	*t = talloc_get_type_abort(mctx->thread, rlm_crl_thread_t);
@@ -662,6 +702,7 @@ static fr_coord_worker_cb_reg_t worker_callbacks[] = {
 static fr_coord_worker_pair_cb_reg_t worker_pair_callbacks[] = {
 	{ .packet_type = FR_CRL_FETCH_OK, .callback = recv_crl_ok },
 	{ .packet_type = FR_CRL_FETCH_FAIL, .callback = recv_crl_fail },
+	{ .packet_type = FR_CRL_CRL_EXPIRE, .callback = recv_crl_expire },
 	FR_COORD_CALLBACK_TERMINATOR
 };
 #endif
